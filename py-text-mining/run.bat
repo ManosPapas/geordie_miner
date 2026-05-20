@@ -1,0 +1,4 @@
+cls
+python geordie_miner.py config.txt data_fulltext
+python geordie_miner.py config.txt data_fulltext_noreference
+python geordie_miner.py config.txt data_fulltext_noreference_nomethodology

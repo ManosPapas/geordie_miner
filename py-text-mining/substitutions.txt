@@ -1,0 +1,4 @@
+vr,virtualreality
+ar,augmentedreality
+virtual reality,virtualreality
+augmented reality,augmentedreality

@@ -1,0 +1,103 @@
+################################################
+# Language and directories
+################################################
+[default]
+
+# Language
+language = english
+
+################################################
+# Preprocessing Settings
+################################################
+[preprocessing]
+
+# File containing custom stopwords
+stopwords_file = stopwords.txt
+
+# File for text substitutions
+substitutions_file = substitutions.txt
+
+# Minimum frequency for terms in a document to be considered 
+min_frequency = 25
+
+################################################
+# Term Analysis Settings
+################################################
+[term_analysis]
+# Number of top terms to analyse and export
+top_n_terms = 200
+
+# Enable lemmatisation of terms
+enable_lemmatization = true
+
+# Save word cloud image
+output_wordcloud = true
+
+# Width of the word cloud image
+wordcloud_width = 800
+
+# Height of the word cloud image
+wordcloud_height = 400
+
+# Background colour of the word cloud
+wordcloud_background_color = white
+
+
+################################################
+# Phrase Analysis Settings
+################################################
+[phrase_analysis]
+# Minimum frequency for bigrams to be included
+bigram_threshold = 10
+
+# Minimum frequency for trigrams to be included
+trigram_threshold = 10
+
+# Number of top bigrams to export
+bigram_export_count = 100
+
+# Number of top trigrams to export
+trigram_export_count = 100
+
+# Metric for clustering analysis
+clustering_metric = jaccard
+
+# Linkage method for hierarchical clustering
+linkage_method = ward
+
+# Size of the dendrogram figure (width, height)
+dendrogram_figsize = 10, 7
+
+cooccurrence_threshold=15
+
+window_size = 5
+
+################################################
+# Topic Modelling Configuration
+################################################
+[topic_modelling]
+topic_modelling_multi1 = 2
+topic_modelling_multi2 = 3
+topic_modelling_multi3 = 4
+
+
+[topic_kmeans]
+# KMeans
+kmeans_topics = 5
+
+[topic_lda]
+# LDA
+lda_topics = 5
+lda_terms_per_topic = 10
+lda_passes = 50
+lda_per_word_topics = 0
+
+[topic_nmf]
+# NMF
+nmf_topics = 5
+nmf_terms_per_topic = 10
+nmf_max_iter = 1000
+
+[topic_hdp]
+# HDP
+terms_per_topic_hdp = 10
