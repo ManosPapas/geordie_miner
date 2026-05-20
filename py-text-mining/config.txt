@@ -27,10 +27,7 @@ min_frequency = 25
 # Number of top terms to analyse and export
 top_n_terms = 200
 
-# Enable lemmatisation of terms
-enable_lemmatization = true
-
-# Save word cloud image
+# Save word cloud image (true/false)
 output_wordcloud = true
 
 # Width of the word cloud image

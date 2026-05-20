@@ -1,4 +1,3 @@
-cls
-python geordie_miner.py config.txt data_fulltext
-python geordie_miner.py config.txt data_fulltext_noreference
-python geordie_miner.py config.txt data_fulltext_noreference_nomethodology
+@echo off
+REM Thin Windows wrapper. Cross-platform equivalent: `python run_all.py`
+python run_all.py %*

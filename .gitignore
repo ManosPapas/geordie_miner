@@ -85,3 +85,6 @@ ehthumbs.db
 
 # ---- Windows shortcuts ----
 *.lnk
+
+# ---- Claude Code local state ----
+.claude/
