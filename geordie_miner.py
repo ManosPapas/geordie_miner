@@ -44,6 +44,7 @@ DEFAULT_CONFIG = os.path.join("config", "config.ini")
 DEFAULT_OUTPUT_BASE = "output"
 DEFAULT_DATA_BASE = "data"
 DEFAULT_COMPARE_TOP_N = 50
+DEFAULT_COMPARE_REPORT = os.path.join("output", "comparison_report.md")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -59,6 +60,16 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("data_dirs", nargs="+", help="One or more directories of PDFs/.txt files.")
     run_p.add_argument("--config", default=DEFAULT_CONFIG, help=f"Path to config file (default: {DEFAULT_CONFIG}).")
     run_p.add_argument("--out", default=DEFAULT_OUTPUT_BASE, help=f"Output base directory (default: {DEFAULT_OUTPUT_BASE}).")
+    run_p.add_argument(
+        "--name",
+        default=None,
+        help=(
+            "Override the output sub-folder name. "
+            "Default is the data folder's basename. "
+            "Use this to keep multiple analyses of the same data (different configs / K) "
+            "side-by-side under output/<name>/. Only valid with a single DATA_DIR."
+        ),
+    )
     run_p.add_argument(
         "--stages",
         default=",".join(ALL_STAGES),
@@ -78,7 +89,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     cmp_p = sub.add_parser("compare", help="Compare existing output directories without re-running the pipeline.")
     cmp_p.add_argument("dirs", nargs="*", help=f"Output directories. Empty = auto-discover {DEFAULT_OUTPUT_BASE}/*.")
-    cmp_p.add_argument("--report", default="comparison_report.md", help="Markdown output path (default: comparison_report.md).")
+    cmp_p.add_argument("--report", default=DEFAULT_COMPARE_REPORT, help=f"Markdown output path (default: {DEFAULT_COMPARE_REPORT}).")
     cmp_p.add_argument("--top", type=int, default=DEFAULT_COMPARE_TOP_N, help=f"Top-N terms (default: {DEFAULT_COMPARE_TOP_N}).")
 
     return p
@@ -180,9 +191,12 @@ def _flatten_processed_tokens(cfg: Config) -> List[str]:
 
 def cmd_run(args: argparse.Namespace) -> int:
     stages = _parse_stages(args.stages)
+    name = getattr(args, "name", None)
+    if name and len(args.data_dirs) > 1:
+        sys.exit("Error: --name only makes sense with a single data directory; remove it or pass one DATA_DIR.")
     for data_dir in args.data_dirs:
         try:
-            cfg = load_config(args.config, data_dir, output_base=args.out)
+            cfg = load_config(args.config, data_dir, output_base=args.out, run_name=name)
             run_pipeline(cfg, stages)
         except SystemExit:
             raise
@@ -215,8 +229,10 @@ def cmd_batch(args: argparse.Namespace) -> int:
         output_dirs = [os.path.join(args.out, os.path.basename(os.path.normpath(d))) for d in dirs]
         output_dirs = [d for d in output_dirs if os.path.isdir(d)]
         if output_dirs:
-            cmp.write_report("comparison_report.md", output_dirs, args.top)
-            print(f"Comparison report written: comparison_report.md ({len(output_dirs)} run(s))")
+            report_path = os.path.join(args.out, "comparison_report.md")
+            os.makedirs(os.path.dirname(report_path), exist_ok=True)
+            cmp.write_report(report_path, output_dirs, args.top)
+            print(f"Comparison report written: {report_path} ({len(output_dirs)} run(s))")
 
     return 0
 
@@ -230,6 +246,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+    os.makedirs(os.path.dirname(args.report) or ".", exist_ok=True)
     cmp.write_report(args.report, dirs, args.top)
     print(f"Comparison report written: {args.report} ({len(dirs)} run(s))")
     return 0

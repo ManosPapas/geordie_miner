@@ -144,8 +144,9 @@ geordie_miner/
 │   └── ...
 │
 ├── output/                     ← created by the pipeline
-│   └── myproject/
-│       └── ...
+│   ├── myproject/              ← one folder per corpus (analysis artefacts)
+│   │   └── ...
+│   └── comparison_report.md    ← written by `batch` / `compare` subcommands
 │
 └── .cache/                     ← auto-downloaded NLTK resources
     └── nltk/
@@ -174,6 +175,27 @@ python geordie_miner.py run data/full data/no_refs data/no_method
 python geordie_miner.py run data/myproject --stages topics       # rerun just the slow part
 python geordie_miner.py run data/myproject --config my_config.ini
 ```
+
+#### Multiple analyses on the same data: `--name`
+
+If you run twice on the same data folder, the second run overwrites the first.
+To keep both — e.g. comparing a baseline against an aggressive-K config — pass
+`--name` to label each run:
+
+```bash
+python geordie_miner.py run data/myproject --name baseline
+# → output/baseline/
+
+python geordie_miner.py run data/myproject --name k20 --config config/k20.ini
+# → output/k20/
+
+python geordie_miner.py compare output/baseline output/k20
+# → output/comparison_report.md
+```
+
+Without `--name`, output still lands at `output/<basename(data_dir)>/` (so
+existing scripts keep working). `--name` is only valid when running a single
+data directory.
 
 ### `batch` — process every `data/*` folder + write a comparison report
 
@@ -213,8 +235,26 @@ python geordie_miner.py run data/myproject --stages topics
 python geordie_miner.py run data/myproject --stages terms
 ```
 
-The pipeline only wipes output folders the running stages will rebuild — skipped
-stages' outputs are preserved.
+### What gets wiped on re-run
+
+- **Full pipeline run** (any run that includes `ingest`, i.e. the default
+  command) — `output/<name>/` is wiped wholesale and rebuilt from scratch.
+  No stale files from previous K values or earlier configs survive.
+- **Partial-stage run** (`--stages topics`, etc.) — only the directories the
+  running stages own are wiped. Skipped stages' outputs are preserved so you
+  can iterate fast on one stage.
+- **Different `--name`** — each name has its own output folder; runs with
+  different names never touch each other. This is how you compare configs:
+
+  ```bash
+  python geordie_miner.py run data/myproject --name baseline
+  python geordie_miner.py run data/myproject --name k20 --config config/k20.ini
+  python geordie_miner.py compare output/baseline output/k20
+  ```
+
+If the wipe fails with a "file in use" error on Windows, close anything that
+has the output open (Gephi on `network.gexf`, image viewer on a word cloud)
+and rerun.
 
 ---
 
@@ -346,8 +386,7 @@ methodology, appendix) changes your themes. Drop each variant into its own
 python geordie_miner.py batch
 ```
 
-This processes each corpus and writes `comparison_report.md` at the repo
-root, showing:
+This processes each corpus and writes `output/comparison_report.md`, showing:
 
 - Top-N terms side-by-side per run
 - Pairwise Jaccard overlap between term lists (higher = more agreement)
@@ -366,17 +405,64 @@ python geordie_miner.py compare --top 100
 
 ---
 
-## Notebook
+## Notebook (`notebooks/explore.ipynb`)
+
+### What it is
+
+An interactive Jupyter view of a finished run. It auto-loads the most recently
+modified `output/<name>/` and renders every artefact inline — term tables,
+top phrases, word clouds, topic models, coherence scores, the dendrogram, and
+network stats — so you don't have to open 30 separate files.
+
+### When to use it instead of `summary.md`
+
+| Use `summary.md` when… | Use `explore.ipynb` when… |
+|------------------------|---------------------------|
+| You want a quick read or something to paste into a paper. | You want to slice and explore the data interactively. |
+| You're sharing a plain-text artefact. | You want sortable / scrollable tables. |
+| You don't have Jupyter installed. | You want to add your own cells (custom queries, plots, comparisons). |
+
+### What's in it
+
+| Cell | Output |
+|------|--------|
+| 1 — Setup | Picks the most recent `output/<name>/` automatically. |
+| 2 — Corpus statistics | Doc count, total words, unique terms, etc. |
+| 3 — Top terms | Sortable DataFrame from `terms_lemmatised.csv`. |
+| 4 — Top phrases | Bigram + trigram tables. |
+| 5 — Word clouds | Both images displayed inline. |
+| 6 — Topic models | Every `topics_*.txt` rendered. |
+| 7 — Topic assignments | First 20 rows of `topic_assignments.csv`. |
+| 8 — Top documents per topic | Example slice of `topic_top_docs.csv`. |
+| 9 — Coherence scores | Full `coherence_scores.csv`. |
+| 10 — Dendrogram + network | Dendrogram image + node/edge counts for `network.gexf`. |
+
+### How to open it
+
+**Option A — Jupyter (browser):**
 
 ```bash
 pip install jupyter
 jupyter lab notebooks/explore.ipynb
 ```
 
-The notebook auto-picks the most recently modified run under `output/` and
-shows term tables, topic models, coherence scores, word clouds and a network
-summary in-place. Edit the `RUN` constant in the first cell to inspect a
-specific run.
+Then in the menu: **Kernel → Restart Kernel and Run All Cells**.
+
+**Option B — VS Code:**
+
+Just open `notebooks/explore.ipynb` — VS Code's built-in notebook editor
+works out of the box. Click **Run All** at the top.
+
+### Inspecting a specific run
+
+By default the notebook picks whichever `output/<name>/` was modified most
+recently. To pin a specific one, edit the first cell:
+
+```python
+RUN = "fulltext_noreference_nomethodology"   # the folder name under output/
+```
+
+Then Run All again.
 
 ---
 

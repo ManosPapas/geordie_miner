@@ -16,7 +16,6 @@ _nltk_data/    # historical name
 # ---- Logs and captured terminal output ----
 *.log
 output.txt
-comparison_report.md
 
 # ---- Python ----
 __pycache__/

@@ -77,13 +77,18 @@ class Config:
     terms_per_topic_hdp: int
 
 
-def load_config(config_path: str, data_dir: str, output_base: str = "output") -> Config:
+def load_config(
+    config_path: str,
+    data_dir: str,
+    output_base: str = "output",
+    run_name: str | None = None,
+) -> Config:
     """Parse the .ini-style config file and return a typed Config.
 
     Validates that the config file and data directory exist before returning.
-    Output directory is `<output_base>/<basename(data_dir)>`.
+    Output directory is `<output_base>/<run_name or basename(data_dir)>`.
     Stopwords / substitutions paths in the config are resolved relative to the
-    config file's location (so a `config/config.txt` referencing `stopwords.txt`
+    config file's location (so `config/config.ini` referencing `stopwords.txt`
     points at `config/stopwords.txt`).
     """
     if not os.path.exists(config_path):
@@ -101,7 +106,8 @@ def load_config(config_path: str, data_dir: str, output_base: str = "output") ->
     def resolve_relative_to_config(value: str) -> str:
         return value if os.path.isabs(value) else os.path.join(config_dir, value)
 
-    directory_analysis = os.path.join(output_base, os.path.basename(os.path.normpath(data_dir)))
+    name = run_name if run_name else os.path.basename(os.path.normpath(data_dir))
+    directory_analysis = os.path.join(output_base, name)
     directory_text = os.path.join(directory_analysis, "text")
     directory_processed = os.path.join(directory_analysis, "text_processed")
 
@@ -157,25 +163,36 @@ def load_config(config_path: str, data_dir: str, output_base: str = "output") ->
 
 
 def init_directories(cfg: Config, stages: list[str] | None = None) -> None:
-    """Create output directories. Only wipe the ones that the current stages will rebuild.
+    """Prepare output directories for a run.
 
-    Without a `stages` argument, wipes everything (full reset).
-    With `stages`, preserves directories that earlier (skipped) stages produced.
+    Full runs (any run that includes the `ingest` stage, or `stages=None`) wipe
+    `directory_analysis` entirely so stale files from previous runs — old K
+    values, leftover topic files, accumulated logs — can't bleed through.
+
+    Partial-stage runs (e.g. `--stages topics`) only wipe what the running
+    stages own; everything else is preserved.
     """
-    os.makedirs(cfg.directory_analysis, exist_ok=True)
-    os.makedirs(cfg.directory_logs, exist_ok=True)
-
     if stages is None or "ingest" in stages:
-        for d in (cfg.directory_text, cfg.directory_processed):
-            if os.path.exists(d):
-                shutil.rmtree(d)
+        # Full rebuild — clean slate.
+        if os.path.exists(cfg.directory_analysis):
+            try:
+                shutil.rmtree(cfg.directory_analysis)
+            except OSError as e:
+                sys.exit(
+                    f"Error: could not wipe '{cfg.directory_analysis}' — "
+                    f"close any files open from previous runs (e.g. Gephi on "
+                    f"network.gexf, image viewers on the word clouds) and try again.\n"
+                    f"Underlying error: {e}"
+                )
+        os.makedirs(cfg.directory_analysis)
+        os.makedirs(cfg.directory_logs)
         os.makedirs(cfg.directory_text)
         os.makedirs(cfg.directory_processed)
-        # corpus stats file is append-only — clear it on full ingest
-        stats_path = cfg.output_path("corpus_stats.txt")
-        if os.path.exists(stats_path):
-            os.remove(stats_path)
         return
+
+    # Partial run: create the base dirs if missing, otherwise leave them alone.
+    os.makedirs(cfg.directory_analysis, exist_ok=True)
+    os.makedirs(cfg.directory_logs, exist_ok=True)
 
     if "preprocess" in stages:
         if os.path.exists(cfg.directory_processed):
