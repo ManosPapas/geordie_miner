@@ -39,7 +39,17 @@ from terms import run_term_analysis  # noqa: E402
 from topics import run_topic_models  # noqa: E402
 
 
-ALL_STAGES = ["ingest", "preprocess", "terms", "phrases", "topics"]
+ALL_STAGES = [
+    "ingest",
+    "metadata",     # extract year / title / DOI per paper
+    "references",   # extract bibliographies + build citation network
+    "preprocess",
+    "terms",
+    "phrases",
+    "topics",       # includes KMeans, LDA, NMF, HDP and (when installed) BERTopic
+    "stability",    # multi-seed LDA stability check
+    "map",          # 2D document map (needs BERTopic embeddings)
+]
 DEFAULT_CONFIG = os.path.join("config", "config.txt")
 DEFAULT_OUTPUT_BASE = "output"
 DEFAULT_DATA_BASE = "data"
@@ -136,12 +146,32 @@ def run_pipeline(cfg: Config, stages: List[str], skip_coherence: bool = False) -
 
     ensure_nltk_resources(log)
 
+    # Pick lemmatisation backend (NLTK or spaCy) once per run.
+    from preprocess import set_lemmatisation_backend
+    set_lemmatisation_backend("spacy" if getattr(cfg, "use_spacy", False) else "nltk", log)
+
     topics_artefacts: dict = {}
 
     if "ingest" in stages:
         log("--- Stage: ingest ---")
         convert_pdfs_to_text(cfg.directory_data, cfg.directory_text, log)
         descriptive_stats(cfg, cfg.directory_text, log)
+
+    if "metadata" in stages:
+        log("--- Stage: metadata ---")
+        try:
+            from metadata import extract_metadata
+            extract_metadata(cfg, log)
+        except Exception as e:
+            log(f"  metadata stage failed (non-fatal): {e}")
+
+    if "references" in stages:
+        log("--- Stage: references ---")
+        try:
+            from references import extract_references
+            extract_references(cfg, log)
+        except Exception as e:
+            log(f"  references stage failed (non-fatal): {e}")
 
     if "preprocess" in stages:
         log("--- Stage: preprocess ---")
@@ -174,6 +204,38 @@ def run_pipeline(cfg: Config, stages: List[str], skip_coherence: bool = False) -
             )
         elif skip_coherence:
             log("--- Stage: coherence skipped (--no-coherence) ---")
+
+    if "stability" in stages:
+        log("--- Stage: stability ---")
+        try:
+            from stability import run_stability
+            docs_for_stability = topics_artefacts.get("tokenised_docs") if topics_artefacts else None
+            if docs_for_stability is None:
+                # Stability needs documents — load them if topics didn't run
+                from topics import load_documents_for_topics
+                docs_list, _ = load_documents_for_topics(cfg)
+                docs_for_stability = docs_list
+            run_stability(cfg, docs_for_stability if isinstance(docs_for_stability, list) and docs_for_stability and isinstance(docs_for_stability[0], str) else [" ".join(d) for d in docs_for_stability], log)
+        except Exception as e:
+            log(f"  stability stage failed (non-fatal): {e}")
+
+    if "map" in stages:
+        log("--- Stage: map ---")
+        try:
+            from document_map import write_document_map
+            embeddings = topics_artefacts.get("embeddings") if topics_artefacts else None
+            if embeddings is None:
+                log("  document map: needs BERTopic embeddings — make sure 'topics' ran and BERTopic is installed.")
+            else:
+                # Use the BERTopic cluster labels for colouring
+                bertopic_label = next((k for k in topics_artefacts["assignments"] if k.startswith("BERTopic")), None)
+                topic_labels = topics_artefacts["assignments"][bertopic_label] if bertopic_label else None
+                if topic_labels is None:
+                    import numpy as np
+                    topic_labels = np.zeros(len(embeddings), dtype=int)
+                write_document_map(cfg, embeddings, topics_artefacts["doc_ids"], topic_labels, log)
+        except Exception as e:
+            log(f"  document map stage failed (non-fatal): {e}")
 
     log("--- Writing summary ---")
     write_summary(cfg, log)

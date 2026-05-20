@@ -41,6 +41,8 @@ class Config:
     stopwords_file: str
     substitutions_file: str
     min_frequency: int
+    use_spacy: bool
+    exclude_sections: list
 
     # Term analysis
     top_n_terms: int
@@ -126,6 +128,8 @@ def load_config(
         stopwords_file=resolve_relative_to_config(cp.get("preprocessing", "stopwords_file", fallback="stopwords.txt")),
         substitutions_file=resolve_relative_to_config(cp.get("preprocessing", "substitutions_file", fallback="substitutions.txt")),
         min_frequency=cp.getint("preprocessing", "min_frequency", fallback=5),
+        use_spacy=cp.getboolean("preprocessing", "use_spacy", fallback=False),
+        exclude_sections=[s.strip() for s in cp.get("preprocessing", "exclude_sections", fallback="").split(",") if s.strip()],
 
         top_n_terms=cp.getint("term_analysis", "top_n_terms", fallback=200),
         output_wordcloud=cp.getboolean("term_analysis", "output_wordcloud", fallback=True),

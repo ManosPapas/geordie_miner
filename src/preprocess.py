@@ -19,10 +19,53 @@ from config import Config
 
 
 _lemmatiser = WordNetLemmatizer()
+_backend = "nltk"
+_spacy_nlp = None  # populated lazily when backend = "spacy"
+
+
+def set_lemmatisation_backend(backend: str, log: Callable[[str], None] | None = None) -> str:
+    """Switch the global tokenisation/lemmatisation backend.
+
+    `backend` is one of:
+      - "nltk"  (default; WordNet lemmatiser)
+      - "spacy" (loads en_core_web_sm; better POS-aware lemmatisation)
+
+    If spaCy is requested but unavailable, falls back to NLTK and logs a warning.
+    Returns the backend that was actually activated.
+    """
+    global _backend, _spacy_nlp
+    if backend == "spacy":
+        try:
+            import spacy
+            _spacy_nlp = spacy.load("en_core_web_sm", disable=["parser", "ner"])
+            _backend = "spacy"
+            if log:
+                log("  preprocess: using spaCy (en_core_web_sm) for tokenisation + lemmatisation.")
+            return "spacy"
+        except Exception as e:
+            msg = (
+                f"  preprocess: spaCy requested but failed to load ({e}). "
+                f"Falling back to NLTK. Install with: pip install spacy && python -m spacy download en_core_web_sm"
+            )
+            if log:
+                log(msg)
+            else:
+                print(msg)
+    _backend = "nltk"
+    if log:
+        log("  preprocess: using NLTK (WordNet) for tokenisation + lemmatisation.")
+    return "nltk"
 
 
 def lemmatise_text(text: str) -> List[str]:
-    """Tokenise, lowercase, drop non-alphabetic tokens, lemmatise."""
+    """Tokenise, lowercase, drop non-alphabetic tokens, lemmatise.
+
+    Backend is whichever was activated by `set_lemmatisation_backend`. Default
+    (no setup needed) is NLTK + WordNet, identical to the original behaviour.
+    """
+    if _backend == "spacy" and _spacy_nlp is not None:
+        doc = _spacy_nlp(text)
+        return [t.lemma_.lower() for t in doc if t.is_alpha and not t.is_space]
     tokens = word_tokenize(text)
     return [_lemmatiser.lemmatize(t.lower()) for t in tokens if t.isalpha()]
 
@@ -140,9 +183,19 @@ def preprocess_corpus(
     corpus: List[List[str]] = []
     files = sorted(f for f in os.listdir(cfg.directory_text) if f.endswith(".txt"))
 
+    # Section-based filtering (optional). When `cfg.exclude_sections` is non-empty,
+    # the named sections are detected and removed before downstream preprocessing.
+    excl = list(getattr(cfg, "exclude_sections", []) or [])
+    if excl:
+        from sections import filter_text_excluding_sections
+        log(f"  excluding sections from preprocess: {', '.join(excl)}")
+
     for filename in tqdm(files, desc="Preprocessing"):
         with open(os.path.join(cfg.directory_text, filename), "r", encoding="utf-8") as f:
-            text = f.read().lower()
+            raw = f.read()
+        if excl:
+            raw = filter_text_excluding_sections(raw, excl)
+        text = raw.lower()
 
         text = re.sub(r"-\s*\n\s*", "", text)                  # join hyphen-broken words
         text = _apply_substitutions(text, substitutions)

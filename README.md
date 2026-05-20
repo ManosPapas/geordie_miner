@@ -64,6 +64,13 @@ pip install -r requirements.txt
 python geordie_miner.py --help
 ```
 
+> ⚠️ **Heads up on install size.** `requirements.txt` includes `bertopic` +
+> `sentence-transformers` for the embedding-based topic model and 2D map.
+> Those pull in PyTorch (~1.5–2.5 GB on disk). First install can take 5–10
+> minutes on a slow connection. If you don't need BERTopic or the visual map,
+> you can comment those lines out of `requirements.txt` and the rest still
+> works (LDA/NMF/HDP cover the topic-modelling base case).
+
 ### Step-by-step (macOS / Linux)
 
 ```bash
@@ -228,15 +235,19 @@ python geordie_miner.py compare --report diff.md --top 100 output/*
 
 ### `--stages` for fast iteration
 
-The pipeline has five stages, run in order:
+The pipeline has nine stages, run in order:
 
-| Stage        | What it does |
-|--------------|--------------|
-| `ingest`     | Convert PDFs to text; copy `.txt` files. Numbers each doc `001__…`. |
-| `preprocess` | Lowercase, strip URLs/parens/non-alphabetic, apply stopwords + substitutions, drop low-frequency tokens, collapse consecutive duplicates. |
-| `terms`      | Term frequencies, TF-IDF, word clouds (raw + lemmatised). |
-| `phrases`    | Bigrams, trigrams, co-occurrence matrix, GEXF network, hierarchical clustering dendrogram. |
-| `topics`     | KMeans + LDA + NMF + HDP at K, K·m1, K·m2, K·m3. Plus coherence scores. |
+| Stage          | What it does |
+|----------------|--------------|
+| `ingest`       | Convert PDFs to text; copy `.txt` files. Numbers each doc `001__…`. |
+| `metadata`     | Best-effort extraction of title, year and DOI per paper → `metadata.csv`. Pure regex, fully offline. |
+| `references`   | Detect the bibliography section of each paper, parse references, build a citation network linking papers that cite other papers in the same corpus → `references.csv` + `citation_network.gexf`. |
+| `preprocess`   | Lowercase, strip URLs / parens / non-alphabetic, apply stopwords + substitutions, drop low-frequency tokens, collapse consecutive duplicates. Optionally drops named sections (`references`, `acknowledgements`, …) before processing — see `exclude_sections` in config. |
+| `terms`        | Term frequencies, TF-IDF, word clouds (raw + lemmatised). |
+| `phrases`      | Bigrams, trigrams, co-occurrence matrix, GEXF network, hierarchical clustering dendrogram. |
+| `topics`       | KMeans + LDA + NMF + HDP at K, K·m1, K·m2, K·m3. Plus **BERTopic** (embedding-based, requires `bertopic` installed). Plus coherence scores (`c_v` + `u_mass`). |
+| `stability`    | Run LDA at the base K with multiple random seeds; report each topic's stability across runs → `topic_stability.csv`. Stable topics (high Jaccard) are likely real signal; unstable ones are likely noise. |
+| `map`          | 2D visual map of every paper using BERTopic embeddings + UMAP → interactive `document_map.html` + static `document_map.png`. Needs the `topics` stage to have produced BERTopic embeddings. |
 
 When you change config and don't want to redo the whole pipeline, skip stages:
 
@@ -279,6 +290,10 @@ output/myproject/
 ├── summary.html                ← interactive version (open in browser)
 ├── corpus_stats.txt
 │
+├── metadata.csv                ← title / year / DOI per paper (best-effort)
+├── references.csv              ← parsed bibliographies + cross-corpus matches
+├── citation_network.gexf       ← citation graph (open in Gephi)
+│
 ├── terms_raw.csv               ← top-N terms (raw)
 ├── terms_raw.xlsx
 ├── terms_lemmatised.csv        ← top-N terms (lemmatised) — the canonical one
@@ -291,7 +306,7 @@ output/myproject/
 ├── trigrams.csv
 │
 ├── cooccurrence.csv            ← every pair with count
-├── network.gexf                ← open in Gephi
+├── network.gexf                ← co-occurrence graph (open in Gephi)
 ├── dendrogram.png
 │
 ├── topics_kmeans_5.txt         ← top terms per topic, per model/K
@@ -304,10 +319,15 @@ output/myproject/
 ├── topics_nmf_5.txt
 ├── ...
 ├── topics_hdp.txt
+├── topics_bertopic.txt         ← embedding-based topic model (if BERTopic installed)
 │
 ├── topic_assignments.csv       ← doc_id × every model/K — one big table
 ├── topic_top_docs.csv          ← top 5 docs per topic per model
 ├── coherence_scores.csv        ← c_v + u_mass for LDA / NMF / HDP — pick K objectively
+├── topic_stability.csv         ← multi-seed LDA stability (high Jaccard = real signal)
+│
+├── document_map.html           ← interactive 2D scatter of every paper (UMAP)
+├── document_map.png            ← static version of the same map
 │
 ├── text/                       ← per-doc raw text
 ├── text_processed/             ← per-doc preprocessed text
@@ -334,6 +354,8 @@ language = english                       # NLTK stopword language
 stopwords_file    = stopwords.txt        # paths are relative to config.txt
 substitutions_file = substitutions.txt
 min_frequency     = 25                   # drop tokens with < N occurrences
+use_spacy         = false                # true = use spaCy instead of NLTK (better, heavier)
+exclude_sections  =                      # e.g. references,acknowledgements,appendix (uses section detector)
 
 [term_analysis]
 top_n_terms                = 200
@@ -560,3 +582,41 @@ make it into the matrix. Or raise `dendrogram_figsize` (default `10, 7`).
 Consecutive duplicate tokens are collapsed automatically (so
 `metaverse metaverse metaverse` → `metaverse`). If you still see noise, check
 that your `substitutions.txt` isn't introducing weird boundaries.
+
+**`topics_bertopic.txt` and `document_map.html` are missing.**
+BERTopic + sentence-transformers aren't installed. Run
+`pip install -r requirements.txt` (or `pip install bertopic sentence-transformers umap-learn plotly`).
+The first BERTopic run downloads the embedding model (~80 MB) into your
+HuggingFace cache.
+
+**Skip individual heavy stages.**
+The new stages are independent. To skip them, use `--stages` with only what
+you want, e.g.:
+
+```bash
+# Run everything except BERTopic + map + stability
+python geordie_miner.py run data/myproject --stages ingest,metadata,references,preprocess,terms,phrases,topics
+
+# Just metadata + references
+python geordie_miner.py run data/myproject --stages ingest,metadata,references
+```
+
+**`metadata.csv` titles are wrong / generic.**
+Title detection is a heuristic. It scans the first chunk of each `.txt`
+looking for the first non-banner line. Works for ~80% of typical academic
+papers; fails when the PDF→text extraction produced unusual whitespace or
+when the publisher's banner uses non-standard text. Edit `metadata.csv`
+manually for the bad rows.
+
+**`references.csv` is empty or sparse.**
+The references extractor needs to find a "References" / "Bibliography"
+section. If your corpus has had references stripped (e.g. the
+`fulltext_noreference_*` variant), there's nothing to extract — that's
+correct behaviour. For other corpora, check `logs/run.log` for the
+"references: extracted N references from M/N files" line — if M is low,
+the section detector isn't finding bibliography headers in your papers.
+
+**spaCy says "model not found".**
+After `pip install spacy`, you also need to download the English model
+once: `python -m spacy download en_core_web_sm`. Then set `use_spacy = true`
+in `config/config.txt`.

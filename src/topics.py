@@ -114,6 +114,20 @@ def run_topic_models(cfg: Config, log: Callable[[str], None]) -> Dict:
     doc_counts[f"HDP_{n_hdp}"] = counts
     top_docs_rows.extend(top)
 
+    # BERTopic — embedding-based topic model. Optional; returns None if dep is missing.
+    embeddings = None
+    try:
+        from bertopic_model import run_bertopic
+        bt = run_bertopic(cfg, docs, doc_ids, log)
+        if bt is not None:
+            assignments[bt["label"]] = bt["labels"]
+            top_words[bt["label"]] = bt["top_words"]
+            doc_counts[bt["label"]] = bt["counts"]
+            top_docs_rows.extend(bt["top_docs"])
+            embeddings = bt["embeddings"]
+    except Exception as e:
+        log(f"  BERTopic failed (non-fatal): {e}")
+
     _write_assignments_csv(cfg, doc_ids, assignments)
     _write_top_docs_csv(cfg, top_docs_rows)
     log(f"Unified topic assignments + top-{TOP_DOCS_PER_TOPIC} docs per topic exported.")
@@ -125,6 +139,7 @@ def run_topic_models(cfg: Config, log: Callable[[str], None]) -> Dict:
         "assignments": assignments,
         "top_words": top_words,
         "doc_counts": doc_counts,
+        "embeddings": embeddings,
     }
 
 

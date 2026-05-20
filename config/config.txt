@@ -17,8 +17,19 @@ stopwords_file = stopwords.txt
 # File for text substitutions
 substitutions_file = substitutions.txt
 
-# Minimum frequency for terms in a document to be considered 
+# Minimum frequency for terms in a document to be considered
 min_frequency = 25
+
+# Use spaCy for tokenisation + lemmatisation (better, but requires `pip install spacy`
+# and `python -m spacy download en_core_web_sm`). false = NLTK (default).
+use_spacy = false
+
+# Comma-separated list of sections to drop before preprocessing. Names come from
+# the section detector: abstract, introduction, literature_review, methodology,
+# results, discussion, conclusion, references, acknowledgements, appendix.
+# Leave blank to keep everything. Example:
+#     exclude_sections = references,acknowledgements,appendix
+exclude_sections =
 
 ################################################
 # Term Analysis Settings

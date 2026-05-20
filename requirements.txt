@@ -3,14 +3,16 @@
 # Install with:   pip install -r requirements.txt
 #
 # Tested with Python 3.10 - 3.12.
-# gensim and scipy compile native code; on Windows you may want to use
-# `conda install -c conda-forge gensim` instead of pip if pip fails.
+# Heavy deps (torch, sentence-transformers, bertopic) add ~2 GB to your venv —
+# they're what powers the embedding-based topic model and the 2D paper map.
 #
 # Supply-chain note: these are minimum versions for convenience. For
 # reproducible / production installs, freeze your environment after a
 # successful install:
 #     pip freeze > requirements-lock.txt
 # and distribute that lock file instead.
+
+# ---- Core text-mining (light) ----
 
 # PDF extraction (pypdf is the actively-maintained successor of PyPDF2)
 pypdf>=4.0
@@ -20,10 +22,16 @@ numpy>=1.26
 pandas>=2.2
 scipy>=1.12
 
-# NLP / text mining
+# NLP / classic topic modelling
 nltk>=3.8
 gensim>=4.3
 scikit-learn>=1.4
+
+# Better tokenisation + lemmatisation (optional, enable via config)
+spacy>=3.7
+
+# Reference / bibliography extraction
+refextract>=1.1
 
 # Visualisation
 matplotlib>=3.8
@@ -35,3 +43,14 @@ openpyxl>=3.1
 
 # Progress bars
 tqdm>=4.66
+
+# ---- Embedding-based topic model + visual map (heavy) ----
+
+# BERTopic pulls in sentence-transformers + transformers + torch
+bertopic>=0.16
+sentence-transformers>=2.7
+umap-learn>=0.5
+hdbscan>=0.8
+
+# Interactive 2D map (plotly produces self-contained HTML)
+plotly>=5.20
