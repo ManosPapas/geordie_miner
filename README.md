@@ -35,30 +35,34 @@ python --version
 git --version
 ```
 
-If either is missing, install:
-- **Python** → https://www.python.org/downloads/ (tick *Add Python to PATH* on Windows)
-- **Git** → https://git-scm.com/downloads
+If `python --version` shows `3.9` or older (or "command not found"), install
+Python from https://www.python.org/downloads/ — tick *Add Python to PATH* on
+Windows, then **open a new terminal** so the new `python` is on your path.
+Missing git? https://git-scm.com/downloads.
 
 ### Step-by-step (Windows / PowerShell)
+
+> 💡 **One-time setup if PowerShell blocks venv activation.** Run this once
+> in PowerShell (no admin needed): `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`.
+> Without it, step 2 below errors with "running scripts is disabled". This is
+> the single most common Windows install blocker.
 
 ```powershell
 # 1. Clone
 git clone https://github.com/<you>/geordie_miner.git
 cd geordie_miner
 
-# 2. Create + activate a virtual environment (keeps deps isolated)
+# 2. Create + activate a virtual environment (keeps deps isolated from your system Python)
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 
-# 3. Install dependencies
+# 3. Upgrade pip, then install dependencies
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 
 # 4. Verify
 python geordie_miner.py --help
 ```
-
-If `.venv\Scripts\Activate.ps1` is blocked, run once in an elevated PowerShell:
-`Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`.
 
 ### Step-by-step (macOS / Linux)
 
@@ -71,25 +75,31 @@ cd geordie_miner
 python3 -m venv .venv
 source .venv/bin/activate
 
-# 3. Install dependencies
+# 3. Upgrade pip, then install dependencies
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 
 # 4. Verify
 python geordie_miner.py --help
 ```
 
-### Optional: faster install with conda
+### Every new terminal session: re-activate the venv
 
-`gensim` and `scipy` compile native code and sometimes fail on plain pip,
-especially on Windows. If `pip install` errors, use conda for those two and
-pip for the rest:
+Closing your terminal deactivates the virtual environment. **Each time you
+open a new one**, re-activate before running anything:
 
-```bash
-conda create -n geordie python=3.12
-conda activate geordie
-conda install -c conda-forge gensim scipy
-pip install -r requirements.txt
+```powershell
+# Windows
+.venv\Scripts\Activate.ps1
 ```
+```bash
+# macOS / Linux
+source .venv/bin/activate
+```
+
+You'll know it's active when your prompt has `(.venv)` in front. If you run
+`python geordie_miner.py ...` without activating and get `ModuleNotFoundError`,
+that's the cause — activate and try again.
 
 ---
 
@@ -97,7 +107,7 @@ pip install -r requirements.txt
 
 ```bash
 # 1. Create a folder for your corpus and drop PDFs / .txt files into it
-mkdir -p data/myproject
+mkdir data/myproject
 # (copy your files into data/myproject/)
 
 # 2. Run
@@ -107,7 +117,9 @@ python geordie_miner.py run data/myproject
 # Open output/myproject/summary.md in any markdown viewer.
 ```
 
-That's it. The first run downloads NLTK resources (~50 MB) into `.cache/nltk/`.
+That's it. The first run downloads NLTK resources (~50 MB) into `.cache/nltk/`;
+subsequent runs reuse them. Make sure your virtual environment is active
+(see [the activation reminder above](#every-new-terminal-session-re-activate-the-venv)).
 
 ---
 
@@ -468,10 +480,16 @@ Then Run All again.
 
 ## Troubleshooting
 
-**`pip install` fails on `gensim` or `scipy` (Windows).**
-Use conda for those two:
-`conda install -c conda-forge gensim scipy`, then
-`pip install -r requirements.txt` for the rest.
+**`ModuleNotFoundError: No module named '<anything>'` when running.**
+Your virtual environment isn't active. Run `.venv\Scripts\Activate.ps1` on
+Windows or `source .venv/bin/activate` on macOS/Linux, then try again. Your
+prompt should show `(.venv)` when it's active.
+
+**`pip install` fails to compile a package.**
+Try `python -m pip install --upgrade pip` then re-run. Modern wheels work on
+every common platform; if you're on something exotic (older Linux, unsupported
+Python version) you may need conda-forge as a last resort:
+`conda install -c conda-forge gensim scipy`.
 
 **`Resource punkt not found` / `Resource wordnet not found`.**
 The first run downloads NLTK resources to `.cache/nltk/`. If you're offline,
