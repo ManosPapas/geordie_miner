@@ -19,7 +19,7 @@ a readable report of what's in them.
 3. [Folder layout](#folder-layout)
 4. [CLI reference](#cli-reference)
 5. [What lands in `output/<name>/`](#what-lands-in-outputname)
-6. [Configuration (`config/config.ini`)](#configuration-configconfigini)
+6. [Configuration (`config/config.txt`)](#configuration-configconfigtxt)
 7. [Comparing multiple runs](#comparing-multiple-runs)
 8. [Notebook](#notebook)
 9. [Troubleshooting](#troubleshooting)
@@ -144,7 +144,7 @@ geordie_miner/
 │   └── compare.py
 │
 ├── config/                     ← what you'll actually edit
-│   ├── config.ini              ← all tunable parameters
+│   ├── config.txt              ← all tunable parameters
 │   ├── stopwords.txt           ← words to drop (one per line)
 │   └── substitutions.txt       ← `original,replacement` pairs (one per line)
 │
@@ -185,7 +185,7 @@ python geordie_miner.py compare [OUTPUT_DIR ...]          [--report PATH] [--top
 python geordie_miner.py run data/myproject
 python geordie_miner.py run data/full data/no_refs data/no_method
 python geordie_miner.py run data/myproject --stages topics       # rerun just the slow part
-python geordie_miner.py run data/myproject --config my_config.ini
+python geordie_miner.py run data/myproject --config my_config.txt
 ```
 
 #### Multiple analyses on the same data: `--name`
@@ -240,7 +240,7 @@ The pipeline has five stages, run in order:
 When you change config and don't want to redo the whole pipeline, skip stages:
 
 ```bash
-# Tweak topic count in config.ini, then re-run only topics (keeps text_processed/):
+# Tweak topic count in config.txt, then re-run only topics (keeps text_processed/):
 python geordie_miner.py run data/myproject --stages topics
 
 # Just regenerate word clouds:
@@ -322,14 +322,14 @@ Drill into the individual files when you want raw numbers.
 
 ---
 
-## Configuration (`config/config.ini`)
+## Configuration (`config/config.txt`)
 
 ```ini
 [default]
 language = english                       # NLTK stopword language
 
 [preprocessing]
-stopwords_file    = stopwords.txt        # paths are relative to config.ini
+stopwords_file    = stopwords.txt        # paths are relative to config.txt
 substitutions_file = substitutions.txt
 min_frequency     = 25                   # drop tokens with < N occurrences
 
@@ -417,9 +417,32 @@ python geordie_miner.py compare --top 100
 
 ---
 
-## Notebook (`notebooks/explore.ipynb`)
+## Notebooks
 
-### What it is
+Two Jupyter notebooks ship with the project. They do different things — pick
+the one that matches your goal:
+
+| Notebook | Purpose |
+|----------|---------|
+| `notebooks/demo.ipynb` | **Run the full pipeline from inside a notebook**, with every config value inline at the top so you can tweak and re-run without touching `config/config.txt`. Each run writes to its own `output/<RUN_NAME>/`. |
+| `notebooks/explore.ipynb` | **Inspect a finished run.** Doesn't execute the pipeline — auto-loads the most recently modified `output/<name>/` and renders the artefacts inline. |
+
+### `notebooks/demo.ipynb` — runnable demo
+
+Open it (see [How to open](#how-to-open-either-notebook) below), edit the first
+code cell to set `DATA_DIR` and `RUN_NAME`, then **Run All Cells**. The notebook:
+
+1. Writes the inline config values to a temporary config file.
+2. Calls the same `run_pipeline` function the CLI uses.
+3. Renders results inline as the pipeline progresses (term tables, word clouds,
+   topic models, coherence scores, etc.).
+4. Prints the best model/K from the coherence table at the end.
+
+To compare two configurations, change a value (e.g. `LDA_TOPICS = 10`) and
+re-run with a different `RUN_NAME`. Both runs are preserved side-by-side under
+`output/`.
+
+### `notebooks/explore.ipynb` — inspect an existing run
 
 An interactive Jupyter view of a finished run. It auto-loads the most recently
 modified `output/<name>/` and renders every artefact inline — term tables,
@@ -449,25 +472,9 @@ network stats — so you don't have to open 30 separate files.
 | 9 — Coherence scores | Full `coherence_scores.csv`. |
 | 10 — Dendrogram + network | Dendrogram image + node/edge counts for `network.gexf`. |
 
-### How to open it
-
-**Option A — Jupyter (browser):**
-
-```bash
-pip install jupyter
-jupyter lab notebooks/explore.ipynb
-```
-
-Then in the menu: **Kernel → Restart Kernel and Run All Cells**.
-
-**Option B — VS Code:**
-
-Just open `notebooks/explore.ipynb` — VS Code's built-in notebook editor
-works out of the box. Click **Run All** at the top.
-
 ### Inspecting a specific run
 
-By default the notebook picks whichever `output/<name>/` was modified most
+By default `explore.ipynb` picks whichever `output/<name>/` was modified most
 recently. To pin a specific one, edit the first cell:
 
 ```python
@@ -475,6 +482,24 @@ RUN = "fulltext_noreference_nomethodology"   # the folder name under output/
 ```
 
 Then Run All again.
+
+### How to open either notebook
+
+**Option A — Jupyter (browser):**
+
+```bash
+pip install jupyter
+jupyter lab notebooks/                # opens both notebooks in the file browser
+```
+
+Then in the menu: **Kernel → Restart Kernel and Run All Cells**.
+
+**Option B — VS Code:**
+
+Just open `notebooks/demo.ipynb` or `notebooks/explore.ipynb` — VS Code's
+built-in notebook editor works out of the box. Click **Run All** at the top.
+First time, you may be prompted to pick a Python kernel — choose the one in
+`.venv`.
 
 ---
 
@@ -508,11 +533,11 @@ Some PDFs are scanned images; `pypdf` can't OCR them. Pre-convert with
 LDA scales linearly with the number of passes and quadratically-ish with K.
 If `topic_modelling_multi3 = 4` and `lda_topics = 5`, you're running LDA at
 K=5, 10, 15, 20 which can take 10–20 minutes on a few-hundred-paper corpus.
-Drop one or two multipliers to 0 in `config.ini`, or use `--stages topics`
+Drop one or two multipliers to 0 in `config.txt`, or use `--stages topics`
 to iterate.
 
 **The dendrogram is an unreadable forest of labels.**
-Raise `cooccurrence_threshold` in `config.ini` (default 15) so fewer terms
+Raise `cooccurrence_threshold` in `config.txt` (default 15) so fewer terms
 make it into the matrix. Or raise `dendrogram_figsize` (default `10, 7`).
 
 **N-gram tables still look noisy.**

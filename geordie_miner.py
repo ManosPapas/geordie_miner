@@ -40,7 +40,7 @@ from topics import run_topic_models  # noqa: E402
 
 
 ALL_STAGES = ["ingest", "preprocess", "terms", "phrases", "topics"]
-DEFAULT_CONFIG = os.path.join("config", "config.ini")
+DEFAULT_CONFIG = os.path.join("config", "config.txt")
 DEFAULT_OUTPUT_BASE = "output"
 DEFAULT_DATA_BASE = "data"
 DEFAULT_COMPARE_TOP_N = 50
