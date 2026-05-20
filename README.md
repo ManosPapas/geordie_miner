@@ -158,7 +158,8 @@ geordie_miner/
 ├── output/                     ← created by the pipeline
 │   ├── myproject/              ← one folder per corpus (analysis artefacts)
 │   │   └── ...
-│   └── comparison_report.md    ← written by `batch` / `compare` subcommands
+│   ├── comparison_report.md    ← written by `batch` / `compare` subcommands
+│   └── comparison_report.html  ← interactive version (open in browser)
 │
 └── .cache/                     ← auto-downloaded NLTK resources
     └── nltk/
@@ -274,7 +275,8 @@ and rerun.
 
 ```
 output/myproject/
-├── summary.md                  ← read this first
+├── summary.md                  ← read this first (plain markdown)
+├── summary.html                ← interactive version (open in browser)
 ├── corpus_stats.txt
 │
 ├── terms_raw.csv               ← top-N terms (raw)
@@ -398,7 +400,10 @@ methodology, appendix) changes your themes. Drop each variant into its own
 python geordie_miner.py batch
 ```
 
-This processes each corpus and writes `output/comparison_report.md`, showing:
+This processes each corpus and writes both `output/comparison_report.md` (plain
+text, paste-into-paper friendly) and `output/comparison_report.html`
+(interactive, open in your browser — sortable tables, collapsible sections),
+showing:
 
 - Top-N terms side-by-side per run
 - Pairwise Jaccard overlap between term lists (higher = more agreement)

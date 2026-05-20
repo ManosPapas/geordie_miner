@@ -127,3 +127,11 @@ def write_report(out_path: str, dirs: List[str], top: int) -> None:
 
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
+
+    # Also write the interactive HTML version alongside the markdown.
+    try:
+        from html_report import write_comparison_html
+        html_path = out_path[:-3] + ".html" if out_path.endswith(".md") else out_path + ".html"
+        write_comparison_html(html_path, dirs, top)
+    except Exception:
+        pass

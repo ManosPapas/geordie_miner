@@ -13,10 +13,11 @@ from typing import Callable, List
 import pandas as pd
 
 from config import Config
+from html_report import write_summary_html
 
 
 def write_summary(cfg: Config, log: Callable[[str], None]) -> None:
-    """Build summary.md from whatever artefacts exist in the output directory."""
+    """Build summary.md + summary.html from artefacts in the output directory."""
     name = os.path.basename(os.path.normpath(cfg.directory_data))
     lines: List[str] = []
     lines.append(f"# Geordie Miner — `{name}` summary")
@@ -38,6 +39,12 @@ def write_summary(cfg: Config, log: Callable[[str], None]) -> None:
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
     log(f"Summary written: {out_path}")
+
+    # Also produce the interactive HTML version.
+    try:
+        write_summary_html(cfg, log)
+    except Exception as e:
+        log(f"HTML summary failed (non-fatal): {e}")
 
 
 def _add_corpus_stats(cfg: Config, lines: List[str]) -> None:
