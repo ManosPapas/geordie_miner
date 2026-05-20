@@ -75,6 +75,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=",".join(ALL_STAGES),
         help=f"Comma-separated stages: {','.join(ALL_STAGES)}. Default: all.",
     )
+    run_p.add_argument(
+        "--no-coherence",
+        action="store_true",
+        help=(
+            "Skip the coherence stage (c_v + u_mass scoring). "
+            "Saves ~5–18 minutes on a 100-paper corpus. "
+            "Use when iterating; re-enable when you want to pick the best K objectively."
+        ),
+    )
 
     batch_p = sub.add_parser(
         "batch",
@@ -85,6 +94,7 @@ def build_parser() -> argparse.ArgumentParser:
     batch_p.add_argument("--out", default=DEFAULT_OUTPUT_BASE, help=f"Output base directory (default: {DEFAULT_OUTPUT_BASE}).")
     batch_p.add_argument("--stages", default=",".join(ALL_STAGES), help="Stages (comma-separated).")
     batch_p.add_argument("--no-compare", action="store_true", help="Skip the cross-run comparison report.")
+    batch_p.add_argument("--no-coherence", action="store_true", help="Skip the coherence stage across all runs.")
     batch_p.add_argument("--top", type=int, default=DEFAULT_COMPARE_TOP_N, help=f"Top-N terms for comparison (default: {DEFAULT_COMPARE_TOP_N}).")
 
     cmp_p = sub.add_parser("compare", help="Compare existing output directories without re-running the pipeline.")
@@ -103,8 +113,12 @@ def _parse_stages(value: str) -> List[str]:
     return stages
 
 
-def run_pipeline(cfg: Config, stages: List[str]) -> None:
-    """Execute the configured stages on a single corpus."""
+def run_pipeline(cfg: Config, stages: List[str], skip_coherence: bool = False) -> None:
+    """Execute the configured stages on a single corpus.
+
+    `skip_coherence=True` bypasses the (slow) coherence scoring even when
+    `topics` is in the stages — useful when iterating on other settings.
+    """
     init_directories(cfg, stages)
     log = make_logger(cfg.log_path("run.log"))
     write_config_log(cfg)
@@ -150,7 +164,7 @@ def run_pipeline(cfg: Config, stages: List[str]) -> None:
     if "topics" in stages:
         log("--- Stage: topics ---")
         topics_artefacts = run_topic_models(cfg, log)
-        if topics_artefacts:
+        if topics_artefacts and not skip_coherence:
             log("--- Stage: coherence ---")
             compute_coherence(
                 cfg,
@@ -158,6 +172,8 @@ def run_pipeline(cfg: Config, stages: List[str]) -> None:
                 topics_artefacts["top_words"],
                 log,
             )
+        elif skip_coherence:
+            log("--- Stage: coherence skipped (--no-coherence) ---")
 
     log("--- Writing summary ---")
     write_summary(cfg, log)
@@ -192,12 +208,13 @@ def _flatten_processed_tokens(cfg: Config) -> List[str]:
 def cmd_run(args: argparse.Namespace) -> int:
     stages = _parse_stages(args.stages)
     name = getattr(args, "name", None)
+    skip_coherence = getattr(args, "no_coherence", False)
     if name and len(args.data_dirs) > 1:
         sys.exit("Error: --name only makes sense with a single data directory; remove it or pass one DATA_DIR.")
     for data_dir in args.data_dirs:
         try:
             cfg = load_config(args.config, data_dir, output_base=args.out, run_name=name)
-            run_pipeline(cfg, stages)
+            run_pipeline(cfg, stages, skip_coherence=skip_coherence)
         except SystemExit:
             raise
         except Exception as e:
@@ -219,7 +236,11 @@ def cmd_batch(args: argparse.Namespace) -> int:
 
     print(f"Running pipeline on {len(dirs)} corpora: {', '.join(dirs)}")
     run_args = argparse.Namespace(
-        data_dirs=dirs, config=args.config, out=args.out, stages=args.stages
+        data_dirs=dirs,
+        config=args.config,
+        out=args.out,
+        stages=args.stages,
+        no_coherence=getattr(args, "no_coherence", False),
     )
     rc = cmd_run(run_args)
     if rc != 0:

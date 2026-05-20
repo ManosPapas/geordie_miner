@@ -529,12 +529,23 @@ Some PDFs are scanned images; `pypdf` can't OCR them. Pre-convert with
 [`pdfplumber`](https://github.com/jsvine/pdfplumber) before dropping into
 `data/<name>/`.
 
-**LDA at high K is very slow.**
-LDA scales linearly with the number of passes and quadratically-ish with K.
-If `topic_modelling_multi3 = 4` and `lda_topics = 5`, you're running LDA at
-K=5, 10, 15, 20 which can take 10–20 minutes on a few-hundred-paper corpus.
-Drop one or two multipliers to 0 in `config.txt`, or use `--stages topics`
-to iterate.
+**The pipeline is slow — most of the time is "Stage: coherence".**
+Coherence scoring (c_v + u_mass for every LDA/NMF/HDP model) is the slow part
+— typically 60–80% of total runtime. It runs in parallel across CPU cores by
+default, but on small machines or for quick iteration you can skip it:
+
+```bash
+python geordie_miner.py run data/myproject --no-coherence
+```
+
+You lose `coherence_scores.csv` (the objective signal for picking K) but get
+the result back in a quarter of the time. Re-enable it once you've settled
+on stopwords / config / preprocessing.
+
+**LDA at high K is also slow.**
+LDA scales linearly with passes and roughly with K. If `topic_modelling_multi3 = 4`
+and `lda_topics = 5`, you're running LDA at K=5, 10, 15, 20. Drop one or two
+multipliers to 0 in `config.txt` if you don't need that range.
 
 **The dendrogram is an unreadable forest of labels.**
 Raise `cooccurrence_threshold` in `config.txt` (default 15) so fewer terms
