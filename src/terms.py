@@ -46,17 +46,17 @@ def run_term_analysis(
     raw_df = _term_table(corpus, cfg.top_n_terms)
     lem_df = _term_table(lemmatised, cfg.top_n_terms)
 
-    raw_df.to_excel(os.path.join(cfg.directory_analysis, "analysis_terms_single_raw.xlsx"), index=False)
-    lem_df.to_excel(os.path.join(cfg.directory_analysis, "analysis_terms_single_lemmatised.xlsx"), index=False)
-    raw_df.to_csv(os.path.join(cfg.directory_analysis, "analysis_terms_single_raw.csv"), index=False)
-    lem_df.to_csv(os.path.join(cfg.directory_analysis, "analysis_terms_single_lemmatised.csv"), index=False)
+    raw_df.to_excel(cfg.output_path("terms_raw.xlsx"), index=False)
+    lem_df.to_excel(cfg.output_path("terms_lemmatised.xlsx"), index=False)
+    raw_df.to_csv(cfg.output_path("terms_raw.csv"), index=False)
+    lem_df.to_csv(cfg.output_path("terms_lemmatised.csv"), index=False)
     log(f"Term analysis: top {cfg.top_n_terms} raw + lemmatised terms exported.")
 
     if cfg.output_wordcloud:
         raw_counts = Counter(t for doc in corpus for t in doc)
         lem_counts = Counter(t for doc in lemmatised for t in doc)
-        _save_wordcloud(cfg, raw_counts, "analysis_descriptive_raw_wordcloud.jpg")
-        _save_wordcloud(cfg, lem_counts, "analysis_descriptive_lemmatised_wordcloud.jpg")
+        _save_wordcloud(cfg, raw_counts, "wordcloud_raw.jpg")
+        _save_wordcloud(cfg, lem_counts, "wordcloud_lemmatised.jpg")
         log("Word clouds exported (raw + lemmatised).")
 
 
@@ -68,4 +68,4 @@ def _save_wordcloud(cfg: Config, counts: Counter, filename: str) -> None:
         height=cfg.wordcloud_height,
         background_color=cfg.wordcloud_background_color,
     ).generate_from_frequencies(counts)
-    wc.to_file(os.path.join(cfg.directory_analysis, filename))
+    wc.to_file(cfg.output_path(filename))

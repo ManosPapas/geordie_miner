@@ -11,9 +11,12 @@ from pypdf import PdfReader
 from tqdm import tqdm
 
 
+NLTK_CACHE_DIR = os.path.join(".cache", "nltk")
+
+
 def ensure_nltk_resources(log: Callable[[str], None]) -> None:
-    """Download required NLTK corpora into ./_nltk_data if not already present."""
-    nltk_data_dir = os.path.join(os.getcwd(), "_nltk_data")
+    """Download required NLTK corpora into ./.cache/nltk if not already present."""
+    nltk_data_dir = os.path.join(os.getcwd(), NLTK_CACHE_DIR)
     os.makedirs(nltk_data_dir, exist_ok=True)
     if nltk_data_dir not in nltk.data.path:
         nltk.data.path.append(nltk_data_dir)

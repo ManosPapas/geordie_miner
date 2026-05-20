@@ -37,8 +37,7 @@ def load_stopwords(cfg: Config, log: Callable[[str], None]) -> List[str]:
     nltk_list = nltk_stopwords.words(cfg.language)
     combined = custom + nltk_list
 
-    log_path = os.path.join(cfg.directory_analysis, "_log_stopwords.txt")
-    with open(log_path, "w", encoding="utf-8") as f:
+    with open(cfg.log_path("stopwords_used.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(combined))
     log(f"Stopwords loaded: {len(custom)} custom + {len(nltk_list)} NLTK ({cfg.language}).")
 
@@ -60,8 +59,7 @@ def load_substitutions(cfg: Config, log: Callable[[str], None]) -> Dict[str, str
             original, replacement = line.split(",", 1)
             subs[original.strip()] = replacement.strip()
 
-    log_path = os.path.join(cfg.directory_analysis, "_log_substitutions.txt")
-    with open(log_path, "w", encoding="utf-8") as f:
+    with open(cfg.log_path("substitutions_used.txt"), "w", encoding="utf-8") as f:
         for k, v in subs.items():
             f.write(f"{k} -> {v}\n")
     log(f"Substitutions loaded: {len(subs)} pairs.")
@@ -95,6 +93,40 @@ def _remove_low_frequency_terms(text: str, min_frequency: int) -> str:
     return "\n".join(out_lines)
 
 
+def _collapse_consecutive_duplicates(text: str) -> str:
+    """Collapse runs of the same token into one, ignoring newlines.
+
+    Substitutions like `virtual reality -> virtualreality` plus stopword removal
+    between repeated mentions can produce `virtualreality virtualreality
+    virtualreality`. This collapses them so n-gram tables aren't dominated by
+    duplicate-token noise. Line structure is not preserved (the processed text
+    files aren't read line-by-line downstream).
+    """
+    return collapse_consecutive(text.split())
+
+
+def collapse_consecutive(tokens: List[str]) -> str:
+    """Public helper: dedupe consecutive duplicates in a token list, return space-joined string."""
+    if not tokens:
+        return ""
+    out = [tokens[0]]
+    for t in tokens[1:]:
+        if t != out[-1]:
+            out.append(t)
+    return " ".join(out)
+
+
+def collapse_consecutive_list(tokens: List[str]) -> List[str]:
+    """Same as `collapse_consecutive` but returns the deduped list instead of a joined string."""
+    if not tokens:
+        return []
+    out = [tokens[0]]
+    for t in tokens[1:]:
+        if t != out[-1]:
+            out.append(t)
+    return out
+
+
 def preprocess_corpus(
     cfg: Config,
     stopwords: List[str],
@@ -122,6 +154,7 @@ def preprocess_corpus(
         text = _apply_substitutions(text, substitutions)       # again — picks up new boundaries
         text = _remove_stopwords(text, stopwords)              # again
         text = _remove_low_frequency_terms(text, cfg.min_frequency)
+        text = _collapse_consecutive_duplicates(text)          # kill `metaverse metaverse` noise
 
         with open(os.path.join(cfg.directory_processed, filename), "w", encoding="utf-8") as f:
             f.write(text)
@@ -132,7 +165,7 @@ def preprocess_corpus(
 
 
 def descriptive_stats(cfg: Config, directory: str, log: Callable[[str], None]) -> None:
-    """Append corpus-level descriptive statistics for `directory` to analysis_corpus.txt."""
+    """Append corpus-level descriptive statistics for `directory` to corpus_stats.txt."""
     docs: List[List[str]] = []
     for filename in sorted(os.listdir(directory)):
         if not filename.endswith(".txt"):
@@ -148,8 +181,7 @@ def descriptive_stats(cfg: Config, directory: str, log: Callable[[str], None]) -
     min_len = min(lengths) if lengths else 0
     max_len = max(lengths) if lengths else 0
 
-    out_path = os.path.join(cfg.directory_analysis, "analysis_corpus.txt")
-    with open(out_path, "a", encoding="utf-8") as f:
+    with open(cfg.output_path("corpus_stats.txt"), "a", encoding="utf-8") as f:
         f.write(
             f"\nDirectory: {directory}\n"
             f"Number of documents: {total_docs}\n"

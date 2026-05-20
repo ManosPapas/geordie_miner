@@ -4,33 +4,110 @@ A text-mining pipeline for academic corpora. Drop a folder of PDFs (or `.txt`
 files) into `data/`, tweak the config, and get back: term frequencies, TF-IDF
 tables, word clouds, n-grams, co-occurrence networks (Gephi-ready),
 hierarchical clusters, and four flavours of topic models (KMeans, LDA, NMF,
-HDP).
+HDP) — plus an automatically-generated `summary.md` so you don't have to click
+through 30 files.
+
+Designed for researchers who want one command to go from a folder of papers to
+a readable report of what's in them.
+
+---
+
+## Table of contents
+
+1. [Install](#install)
+2. [Quickstart](#quickstart)
+3. [Folder layout](#folder-layout)
+4. [CLI reference](#cli-reference)
+5. [What lands in `output/<name>/`](#what-lands-in-outputname)
+6. [Configuration (`config/config.ini`)](#configuration-configconfigini)
+7. [Comparing multiple runs](#comparing-multiple-runs)
+8. [Notebook](#notebook)
+9. [Troubleshooting](#troubleshooting)
+
+---
+
+## Install
+
+You need **Python 3.10 or newer** and **git**. Check with:
+
+```bash
+python --version
+git --version
+```
+
+If either is missing, install:
+- **Python** → https://www.python.org/downloads/ (tick *Add Python to PATH* on Windows)
+- **Git** → https://git-scm.com/downloads
+
+### Step-by-step (Windows / PowerShell)
+
+```powershell
+# 1. Clone
+git clone https://github.com/<you>/geordie_miner.git
+cd geordie_miner
+
+# 2. Create + activate a virtual environment (keeps deps isolated)
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Verify
+python geordie_miner.py --help
+```
+
+If `.venv\Scripts\Activate.ps1` is blocked, run once in an elevated PowerShell:
+`Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`.
+
+### Step-by-step (macOS / Linux)
+
+```bash
+# 1. Clone
+git clone https://github.com/<you>/geordie_miner.git
+cd geordie_miner
+
+# 2. Create + activate a virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Verify
+python geordie_miner.py --help
+```
+
+### Optional: faster install with conda
+
+`gensim` and `scipy` compile native code and sometimes fail on plain pip,
+especially on Windows. If `pip install` errors, use conda for those two and
+pip for the rest:
+
+```bash
+conda create -n geordie python=3.12
+conda activate geordie
+conda install -c conda-forge gensim scipy
+pip install -r requirements.txt
+```
 
 ---
 
 ## Quickstart
 
 ```bash
-# 1. Clone and enter the project
-git clone https://github.com/<you>/geordie_miner.git
-cd geordie_miner
+# 1. Create a folder for your corpus and drop PDFs / .txt files into it
+mkdir -p data/myproject
+# (copy your files into data/myproject/)
 
-# 2. (Optional but recommended) create a virtual environment
-python -m venv .venv
-.venv\Scripts\activate           # Windows
-source .venv/bin/activate        # macOS / Linux
+# 2. Run
+python geordie_miner.py run data/myproject
 
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Put your PDFs / .txt files in a folder, e.g. data/fulltext/
-
-# 5. Run
-python geordie_miner.py data/fulltext
+# 3. Read the report
+# Open output/myproject/summary.md in any markdown viewer.
 ```
 
-Outputs land in `output/fulltext/`. Open the `.xlsx` / `.csv` / `.png`
-files directly, and the `.gexf` network in [Gephi](https://gephi.org/).
+That's it. The first run downloads NLTK resources (~50 MB) into `.cache/nltk/`.
 
 ---
 
@@ -40,127 +117,173 @@ files directly, and the `.gexf` network in [Gephi](https://gephi.org/).
 geordie_miner/
 ├── README.md
 ├── requirements.txt
-├── run.bat                 ← Windows wrapper, calls run_all.py
-├── geordie_miner.py        ← main CLI entry point
-├── compare.py              ← cross-run comparison report
-├── run_all.py              ← batch runner for ./data/*
+├── geordie_miner.py            ← THE CLI — one file, three subcommands
 │
-├── src/                    ← internal modules (don't edit these casually)
+├── src/                        ← internal modules (you usually won't touch these)
 │   ├── config.py
 │   ├── logger.py
 │   ├── ingest.py
 │   ├── preprocess.py
 │   ├── terms.py
 │   ├── phrases.py
-│   └── topics.py
+│   ├── topics.py
+│   ├── coherence.py
+│   ├── summary.py
+│   └── compare.py
 │
-├── config/                 ← all the knobs you'll actually want to turn
-│   ├── config.txt
-│   ├── stopwords.txt
-│   └── substitutions.txt
+├── config/                     ← what you'll actually edit
+│   ├── config.ini              ← all tunable parameters
+│   ├── stopwords.txt           ← words to drop (one per line)
+│   └── substitutions.txt       ← `original,replacement` pairs (one per line)
 │
-├── data/                   ← your input corpora (gitignored)
-│   ├── fulltext/
-│   ├── fulltext_no_refs/
-│   └── fulltext_no_method/
+├── notebooks/
+│   └── explore.ipynb           ← interactive view of a finished run
 │
-└── output/                 ← analysis results (gitignored)
-    ├── fulltext/
-    ├── fulltext_no_refs/
-    └── fulltext_no_method/
+├── data/                       ← create subfolders here for each corpus
+│   ├── myproject/              ← your PDFs / .txt files
+│   └── ...
+│
+├── output/                     ← created by the pipeline
+│   └── myproject/
+│       └── ...
+│
+└── .cache/                     ← auto-downloaded NLTK resources
+    └── nltk/
 ```
 
-`data/` and `output/` are gitignored so your corpus (likely copyrighted) and
-your large analysis files don't end up in the repo. Each `data/<name>/` you
-add automatically gets a matching `output/<name>/`.
-
----
-
-## Running multiple corpora
-
-Pass several `data/...` paths in one go — each gets its own `output/<name>/`:
-
-```bash
-python geordie_miner.py data/fulltext data/fulltext_no_refs data/fulltext_no_method
-```
-
-Or auto-discover every subfolder of `data/` and write a cross-run **comparison
-report**:
-
-```bash
-python run_all.py
-```
-
-That writes `comparison_report.md` at the repo root. Use it to sanity-check
-that removing references / methodology doesn't shift your thematic findings.
+`data/`, `output/`, and `.cache/` are gitignored. Your corpus and your large
+analysis files don't leak into commits.
 
 ---
 
 ## CLI reference
 
+One entry point, three subcommands:
+
 ```text
-python geordie_miner.py DATA_DIR [DATA_DIR ...]
-                        [--config config/config.txt]
-                        [--out output]
-                        [--stages STAGES]
+python geordie_miner.py run     DATA_DIR [DATA_DIR ...]   [--config ...] [--out ...] [--stages ...]
+python geordie_miner.py batch   [DATA_DIR ...]            [--config ...] [--out ...] [--stages ...] [--no-compare] [--top N]
+python geordie_miner.py compare [OUTPUT_DIR ...]          [--report PATH] [--top N]
 ```
 
-| Argument     | Default              | Meaning |
-|--------------|----------------------|---------|
-| `data_dir`   | (required, ≥1)       | One or more folders of PDFs / `.txt` files. |
-| `--config`   | `config/config.txt`  | Path to `.ini`-style config. Stopwords / substitutions paths inside it are resolved relative to *this* file. |
-| `--out`      | `output`             | Base directory for analysis output. Each run produces `<out>/<basename(data_dir)>/`. |
-| `--stages`   | all                  | Comma-separated subset of: `ingest, preprocess, terms, phrases, topics`. |
-
-`python geordie_miner.py --help` shows the same info inline.
-
-### Skipping stages (iteration)
-
-When tweaking config, skip the slow parts:
+### `run` — process one or more specific corpora
 
 ```bash
-# Re-run only the topic models — keeps preprocessed text on disk
-python geordie_miner.py data/fulltext --stages topics
+python geordie_miner.py run data/myproject
+python geordie_miner.py run data/full data/no_refs data/no_method
+python geordie_miner.py run data/myproject --stages topics       # rerun just the slow part
+python geordie_miner.py run data/myproject --config my_config.ini
 ```
 
-`init_directories` is stage-aware: it only wipes folders the running stages
-will rebuild, so `--stages topics` won't delete your `text_processed/`.
+### `batch` — process every `data/*` folder + write a comparison report
+
+```bash
+python geordie_miner.py batch                  # auto-discovers all data/*
+python geordie_miner.py batch --top 100        # comparison at top-100 terms
+python geordie_miner.py batch --no-compare     # skip the cross-run report
+```
+
+### `compare` — generate a comparison report from existing output dirs
+
+```bash
+python geordie_miner.py compare                                # all output/*
+python geordie_miner.py compare output/a output/b              # explicit pair
+python geordie_miner.py compare --report diff.md --top 100 output/*
+```
+
+### `--stages` for fast iteration
+
+The pipeline has five stages, run in order:
+
+| Stage        | What it does |
+|--------------|--------------|
+| `ingest`     | Convert PDFs to text; copy `.txt` files. Numbers each doc `001__…`. |
+| `preprocess` | Lowercase, strip URLs/parens/non-alphabetic, apply stopwords + substitutions, drop low-frequency tokens, collapse consecutive duplicates. |
+| `terms`      | Term frequencies, TF-IDF, word clouds (raw + lemmatised). |
+| `phrases`    | Bigrams, trigrams, co-occurrence matrix, GEXF network, hierarchical clustering dendrogram. |
+| `topics`     | KMeans + LDA + NMF + HDP at K, K·m1, K·m2, K·m3. Plus coherence scores. |
+
+When you change config and don't want to redo the whole pipeline, skip stages:
+
+```bash
+# Tweak topic count in config.ini, then re-run only topics (keeps text_processed/):
+python geordie_miner.py run data/myproject --stages topics
+
+# Just regenerate word clouds:
+python geordie_miner.py run data/myproject --stages terms
+```
+
+The pipeline only wipes output folders the running stages will rebuild — skipped
+stages' outputs are preserved.
 
 ---
 
-## Stages
+## What lands in `output/<name>/`
 
-1. **`ingest`** — copy each `.txt` file and convert each `.pdf` to text via
-   [`pypdf`](https://pypi.org/project/pypdf/). Files are numbered (`001__`,
-   `002__`, …) to give every document a stable id.
-2. **`preprocess`** — lowercase, join hyphen-broken words, strip URLs and
-   parenthesised text, drop non-alphabetic characters and single-character
-   tokens, apply stopwords + substitutions (twice — catches plurals), drop
-   low-frequency terms.
-3. **`terms`** — top-N term frequencies, document frequency, summed TF-IDF,
-   raw and lemmatised. Word clouds.
-4. **`phrases`** — bigrams + trigrams, co-occurrence matrix in a configurable
-   sentence window, a GEXF network for Gephi, and an agglomerative
-   hierarchical clustering dendrogram.
-5. **`topics`** — four topic models: KMeans, LDA, NMF, HDP. Each runs at the
-   configured base `K` plus optional multiples (`K*m1`, `K*m2`, `K*m3`).
+```
+output/myproject/
+├── summary.md                  ← read this first
+├── corpus_stats.txt
+│
+├── terms_raw.csv               ← top-N terms (raw)
+├── terms_raw.xlsx
+├── terms_lemmatised.csv        ← top-N terms (lemmatised) — the canonical one
+├── terms_lemmatised.xlsx
+│
+├── wordcloud_raw.jpg
+├── wordcloud_lemmatised.jpg
+│
+├── bigrams.csv
+├── trigrams.csv
+│
+├── cooccurrence.csv            ← every pair with count
+├── network.gexf                ← open in Gephi
+├── dendrogram.png
+│
+├── topics_kmeans_5.txt         ← top terms per topic, per model/K
+├── topics_kmeans_10.txt
+├── topics_kmeans_15.txt
+├── topics_kmeans_20.txt
+├── topics_lda_5.txt
+├── topics_lda_10.txt
+├── ...
+├── topics_nmf_5.txt
+├── ...
+├── topics_hdp.txt
+│
+├── topic_assignments.csv       ← doc_id × every model/K — one big table
+├── topic_top_docs.csv          ← top 5 docs per topic per model
+├── coherence_scores.csv        ← c_v + u_mass for LDA / NMF / HDP — pick K objectively
+│
+├── text/                       ← per-doc raw text
+├── text_processed/             ← per-doc preprocessed text
+│
+└── logs/
+    ├── run.log
+    ├── config_used.txt         ← resolved config at runtime
+    ├── stopwords_used.txt
+    └── substitutions_used.txt
+```
+
+**Start with `summary.md`** — it stitches the most important pieces together.
+Drill into the individual files when you want raw numbers.
 
 ---
 
-## Configuration (`config/config.txt`)
+## Configuration (`config/config.ini`)
 
 ```ini
 [default]
-language = english
+language = english                       # NLTK stopword language
 
 [preprocessing]
-stopwords_file    = stopwords.txt        # path relative to config.txt
+stopwords_file    = stopwords.txt        # paths are relative to config.ini
 substitutions_file = substitutions.txt
 min_frequency     = 25                   # drop tokens with < N occurrences
 
 [term_analysis]
 top_n_terms                = 200
-output_wordcloud           = true        # real boolean (true / false)
+output_wordcloud           = true        # real boolean
 wordcloud_width            = 800
 wordcloud_height           = 400
 wordcloud_background_color = white
@@ -177,7 +300,7 @@ cooccurrence_threshold = 15
 window_size            = 5
 
 [topic_modelling]
-# Each topic model is run at K, K*m1, K*m2, K*m3 — set a multiplier to 0 to skip.
+# Each topic model is run at K, K·m1, K·m2, K·m3. Set a multiplier to 0 to skip.
 topic_modelling_multi1 = 2
 topic_modelling_multi2 = 3
 topic_modelling_multi3 = 4
@@ -200,85 +323,95 @@ nmf_max_iter          = 1000
 terms_per_topic_hdp = 10
 ```
 
----
+### Tuning checklist
 
-## What lands in `output/<name>/`
-
-| File | Content |
-|------|---------|
-| `_log_output.log`            | Full timestamped run log. |
-| `_log_config.log`            | Resolved configuration snapshot. |
-| `_log_stopwords.txt`         | Effective stopword list (custom + NLTK). |
-| `_log_substitutions.txt`     | Applied substitution pairs. |
-| `text/`                      | Per-document text after PDF extraction. |
-| `text_processed/`            | Per-document text after preprocessing. |
-| `analysis_corpus.txt`        | Corpus-level descriptive stats. |
-| `analysis_terms_single_raw.{csv,xlsx}`        | Top-N raw term table. |
-| `analysis_terms_single_lemmatised.{csv,xlsx}` | Top-N lemmatised term table. |
-| `analysis_descriptive_*_wordcloud.jpg`        | Word cloud images. |
-| `analysis_terms_ngram2.csv`  | Top bigrams. |
-| `analysis_terms_ngram3.csv`  | Top trigrams. |
-| `analysis_cooccurrence.csv`  | Pairwise co-occurrence counts. |
-| `analysis_cooccurrence_network.gexf` | Network for Gephi. |
-| `analysis_ahc_dendrogram_jaccard.png` | Hierarchical-clustering dendrogram. |
-| `analysis_topicmodel_KMEANS_cluster_centroids_<K>.txt` | KMeans centroids. |
-| `analysis_topicmodel_KMeans_<K>_doc2topic_assignments.txt` | KMeans doc→cluster. |
-| `analysis_topicmodel_LDA_<K>.txt`             | LDA topic words. |
-| `analysis_topicmodel_LDA_<K>_doc2topic_assignments.txt`   | LDA doc→topic. |
-| `analysis_topicmodel_NMF_<K>.txt`             | NMF topic words. |
-| `analysis_topicmodel_nmf_<K>_doc2topic_assignments.txt`   | NMF doc→topic. |
-| `analysis_topicmodel_HDP.txt`                 | HDP topic words. |
-| `analysis_topicmodel_HDP_doc2topic_assignments.txt`       | HDP doc→topic. |
+- **Too many junk tokens** in word clouds → add to `config/stopwords.txt`.
+- **Same concept appearing as different words** (e.g. *VR* vs *virtual reality*)
+  → add `vr,virtualreality` and `virtual reality,virtualreality` to
+  `config/substitutions.txt`.
+- **Topics blur into one big bucket** → raise `kmeans_topics` / `lda_topics`,
+  or check `coherence_scores.csv` to pick K objectively.
+- **Topics fragment into noise** → lower K, or check `min_frequency` isn't too
+  high.
 
 ---
 
-## Comparison report
+## Comparing multiple runs
+
+Useful when you want to know whether removing certain sections (references,
+methodology, appendix) changes your themes. Drop each variant into its own
+`data/<name>/` folder, then:
 
 ```bash
-python compare.py                              # auto-discovers ./output/*
-python compare.py output/a output/b output/c   # explicit list
-python compare.py --out diff.md --top 100 output/*
+python geordie_miner.py batch
 ```
 
-Writes a markdown file with:
+This processes each corpus and writes `comparison_report.md` at the repo
+root, showing:
 
-- Top-N terms in each run, side-by-side
-- Pairwise Jaccard overlap between term lists
+- Top-N terms side-by-side per run
+- Pairwise Jaccard overlap between term lists (higher = more agreement)
 - Terms unique to each run
-- Topic-model output dumped for each run
+- Full topic-model output dumped per run
 
-This is the research artefact when comparing variants (e.g. "do references
-distort my themes?").
+> **Rule of thumb:** if Jaccard ≥ 0.7 across all pairs, your themes are robust
+> to the variation.
+
+You can also run `compare` standalone if you already have output dirs from a
+previous batch:
+
+```bash
+python geordie_miner.py compare --top 100
+```
+
+---
+
+## Notebook
+
+```bash
+pip install jupyter
+jupyter lab notebooks/explore.ipynb
+```
+
+The notebook auto-picks the most recently modified run under `output/` and
+shows term tables, topic models, coherence scores, word clouds and a network
+summary in-place. Edit the `RUN` constant in the first cell to inspect a
+specific run.
 
 ---
 
 ## Troubleshooting
 
-- **`gensim` / `scipy` fail to install on Windows.** Use conda for those:
-  `conda install -c conda-forge gensim scipy`, then `pip install -r requirements.txt`
-  for the rest.
-- **`Resource punkt not found`.** The first run downloads NLTK resources into
-  `./_nltk_data/`. If you're offline, run once while online:
-  `python -c "import nltk; [nltk.download(p) for p in ['stopwords','punkt','punkt_tab','wordnet']]"`
-- **PDFs come out garbled.** Some PDFs are scanned images; `pypdf` can't OCR
-  them. Pre-convert with [`ocrmypdf`](https://github.com/ocrmypdf/OCRmyPDF)
-  or [`pdfplumber`](https://github.com/jsvine/pdfplumber) before dropping into
-  `data/`.
-- **N-gram output is full of `metaverse metaverse`.** When substitutions
-  collapse `virtual reality` → `virtualreality` and stopwords between repeated
-  mentions get stripped, you get duplicate-token n-grams. A future improvement
-  is to collapse consecutive duplicate tokens during preprocessing.
+**`pip install` fails on `gensim` or `scipy` (Windows).**
+Use conda for those two:
+`conda install -c conda-forge gensim scipy`, then
+`pip install -r requirements.txt` for the rest.
 
----
+**`Resource punkt not found` / `Resource wordnet not found`.**
+The first run downloads NLTK resources to `.cache/nltk/`. If you're offline,
+run once while online:
+```bash
+python -c "import nltk; [nltk.download(p) for p in ['stopwords','punkt','punkt_tab','wordnet']]"
+```
 
-## Notes for users of the older version
+**PDFs come out garbled or empty.**
+Some PDFs are scanned images; `pypdf` can't OCR them. Pre-convert with
+[`ocrmypdf`](https://github.com/ocrmypdf/OCRmyPDF) or
+[`pdfplumber`](https://github.com/jsvine/pdfplumber) before dropping into
+`data/<name>/`.
 
-- The wrapper `py-text-mining/` folder is gone; the repo root *is* the project.
-- Output dirs moved from `analyis_<dataset>/` (typo) → `output/<dataset>/`.
-- Config moved from a flat file to `config/config.txt`.
-- CLI signature changed: data dirs are positional, config is `--config`:
-  - **Old:** `python geordie_miner.py config.txt data_fulltext`
-  - **New:** `python geordie_miner.py data/fulltext`
-- The lemmatised word cloud is now built from lemmatised counts (was a bug).
-- `output_wordcloud` is a real boolean — `false` actually skips it.
-- The unused `enable_lemmatization` key has been removed.
+**LDA at high K is very slow.**
+LDA scales linearly with the number of passes and quadratically-ish with K.
+If `topic_modelling_multi3 = 4` and `lda_topics = 5`, you're running LDA at
+K=5, 10, 15, 20 which can take 10–20 minutes on a few-hundred-paper corpus.
+Drop one or two multipliers to 0 in `config.ini`, or use `--stages topics`
+to iterate.
+
+**The dendrogram is an unreadable forest of labels.**
+Raise `cooccurrence_threshold` in `config.ini` (default 15) so fewer terms
+make it into the matrix. Or raise `dendrogram_figsize` (default `10, 7`).
+
+**N-gram tables still look noisy.**
+Consecutive duplicate tokens are collapsed automatically (so
+`metaverse metaverse metaverse` → `metaverse`). If you still see noise, check
+that your `substitutions.txt` isn't introducing weird boundaries.

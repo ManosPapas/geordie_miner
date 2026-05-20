@@ -3,17 +3,15 @@
 # ============================================================
 
 # ---- Input data (likely copyrighted journal articles) ----
-# Keep the folder, ignore its contents. Drop your corpus(es) into data/<name>/.
-# Remove these lines (or use `git add -f`) if you want to track a corpus.
-data/*
-!data/.gitkeep
+# Drop your corpus(es) into data/<name>/ — they stay local.
+data/
 
 # ---- Analysis output (regenerated on every run) ----
-output/*
-!output/.gitkeep
+output/
 
-# ---- NLTK data (downloaded on first run) ----
-_nltk_data/
+# ---- Caches (auto-downloaded NLTK resources, etc) ----
+.cache/
+_nltk_data/    # historical name
 
 # ---- Logs and captured terminal output ----
 *.log

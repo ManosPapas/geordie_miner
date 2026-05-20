@@ -1,36 +1,21 @@
-"""Compare two or more Geordie Miner runs.
+"""Cross-run comparison report.
 
-Reads `analysis_terms_single_lemmatised.csv` and the topic-model output files from each
-output directory, then writes a single markdown report that highlights overlap and
+Reads `terms_lemmatised.csv` and the `topics_*.txt` files from each output
+directory, then writes a single markdown report that highlights overlap and
 divergence in top terms / topic words across runs.
-
-Usage:
-    python compare.py                                # auto-discovers ./output/*
-    python compare.py output/a output/b output/c     # explicit list
-    python compare.py --out my_report.md output/*
 """
 
 from __future__ import annotations
 
-import argparse
 import glob
 import os
-import sys
 from typing import Dict, List, Tuple
 
 import pandas as pd
 
 
-def parse_args(argv: List[str]) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Compare top terms + topic models across analysis runs.")
-    p.add_argument("dirs", nargs="*", help="Analysis directories. If empty, auto-discovers ./output/*.")
-    p.add_argument("--out", default="comparison_report.md", help="Markdown output path (default: comparison_report.md).")
-    p.add_argument("--top", type=int, default=50, help="How many top terms to compare per run (default: 50).")
-    return p.parse_args(argv)
-
-
-def discover_dirs() -> List[str]:
-    return sorted(d for d in glob.glob(os.path.join("output", "*")) if os.path.isdir(d))
+def discover_dirs(base: str = "output") -> List[str]:
+    return sorted(d for d in glob.glob(os.path.join(base, "*")) if os.path.isdir(d))
 
 
 def short_name(path: str) -> str:
@@ -38,7 +23,7 @@ def short_name(path: str) -> str:
 
 
 def load_top_terms(directory: str, top: int) -> List[str]:
-    csv_path = os.path.join(directory, "analysis_terms_single_lemmatised.csv")
+    csv_path = os.path.join(directory, "terms_lemmatised.csv")
     if not os.path.exists(csv_path):
         return []
     df = pd.read_csv(csv_path).head(top)
@@ -49,9 +34,8 @@ def load_topic_files(directory: str) -> Dict[str, str]:
     """Map topic-model label -> file contents for the per-topic word files."""
     out: Dict[str, str] = {}
     for filename in sorted(os.listdir(directory)):
-        # Match files like analysis_topicmodel_LDA_5.txt, analysis_topicmodel_NMF_10.txt, analysis_topicmodel_HDP.txt
-        if filename.startswith("analysis_topicmodel_") and filename.endswith(".txt") and "doc2topic" not in filename and "cluster_centroids" not in filename:
-            label = filename.replace("analysis_topicmodel_", "").removesuffix(".txt")
+        if filename.startswith("topics_") and filename.endswith(".txt"):
+            label = filename.removeprefix("topics_").removesuffix(".txt")
             with open(os.path.join(directory, filename), "r", encoding="utf-8") as f:
                 out[label] = f.read()
     return out
@@ -143,19 +127,3 @@ def write_report(out_path: str, dirs: List[str], top: int) -> None:
 
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
-
-
-def main(argv: List[str] | None = None) -> int:
-    args = parse_args(sys.argv[1:] if argv is None else argv)
-    dirs = args.dirs or discover_dirs()
-    dirs = [d for d in dirs if os.path.isdir(d)]
-    if not dirs:
-        print("No analysis directories provided or discovered.", file=sys.stderr)
-        return 1
-    write_report(args.out, dirs, args.top)
-    print(f"Report written: {args.out}")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

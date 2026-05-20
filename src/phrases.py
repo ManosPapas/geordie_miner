@@ -19,26 +19,39 @@ from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.spatial.distance import pdist
 
 from config import Config
-from preprocess import lemmatise_text
+from preprocess import collapse_consecutive_list, lemmatise_text
 
 
 def load_processed_corpus(cfg: Config) -> Tuple[List[str], List[str]]:
-    """Read all processed .txt files, return (concatenated tokens, file_names)."""
+    """Read all processed .txt files, return (deduped concatenated tokens, file_names).
+
+    Lemmatisation can re-introduce consecutive duplicates (e.g. `products` and
+    `product` both become `product`), so we collapse again per-file before
+    concatenating.
+    """
     tokens: List[str] = []
     names: List[str] = []
     for filename in sorted(os.listdir(cfg.directory_processed)):
         if not filename.endswith(".txt"):
             continue
         with open(os.path.join(cfg.directory_processed, filename), "r", encoding="utf-8") as f:
-            tokens.extend(lemmatise_text(f.read()))
+            file_tokens = lemmatise_text(f.read())
+        tokens.extend(collapse_consecutive_list(file_tokens))
         names.append(filename)
     return tokens, names
 
 
 def _export_ngrams(corpus: List[str], n: int, threshold: int, top_k: int, out_path: str) -> int:
+    """Export top n-grams to CSV. Skip n-grams with repeated tokens (e.g. A-B-A) — they
+    add no information beyond their constituent (n-1)-grams and clutter the top list.
+    """
     freq = Counter(ngrams(corpus, n))
     rows = sorted(
-        ((" ".join(gram), count) for gram, count in freq.items() if count >= threshold),
+        (
+            (" ".join(gram), count)
+            for gram, count in freq.items()
+            if count >= threshold and len(set(gram)) == n
+        ),
         key=lambda x: x[1],
         reverse=True,
     )[:top_k]
@@ -57,13 +70,13 @@ def run_phrase_analysis(
     """Export bigrams, trigrams, co-occurrence CSV + GEXF network. Return cooccurrence_counts."""
     n2 = _export_ngrams(
         corpus, 2, cfg.bigram_threshold, cfg.bigram_export_count,
-        os.path.join(cfg.directory_analysis, "analysis_terms_ngram2.csv"),
+        cfg.output_path("bigrams.csv"),
     )
     log(f"Bigrams exported: {n2} (threshold >= {cfg.bigram_threshold}).")
 
     n3 = _export_ngrams(
         corpus, 3, cfg.trigram_threshold, cfg.trigram_export_count,
-        os.path.join(cfg.directory_analysis, "analysis_terms_ngram3.csv"),
+        cfg.output_path("trigrams.csv"),
     )
     log(f"Trigrams exported: {n3} (threshold >= {cfg.trigram_threshold}).")
 
@@ -75,7 +88,7 @@ def run_phrase_analysis(
                 cooccurrence[t][toks[j]] += 1
                 cooccurrence[toks[j]][t] += 1
 
-    cooc_path = os.path.join(cfg.directory_analysis, "analysis_cooccurrence.csv")
+    cooc_path = cfg.output_path("cooccurrence.csv")
     with open(cooc_path, "w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["term1", "term2", "cooccurrence_count"])
@@ -89,7 +102,7 @@ def run_phrase_analysis(
         for t2, count in neighbours.items():
             if count >= cfg.cooccurrence_threshold:
                 graph.add_edge(t1, t2, weight=count)
-    nx.write_gexf(graph, os.path.join(cfg.directory_analysis, "analysis_cooccurrence_network.gexf"))
+    nx.write_gexf(graph, cfg.output_path("network.gexf"))
     log(f"Co-occurrence network saved ({graph.number_of_nodes()} nodes, {graph.number_of_edges()} edges).")
 
     return cooccurrence
@@ -120,7 +133,6 @@ def run_hierarchical_clustering(
     plt.title(f"Agglomerative Hierarchical Clustering ({cfg.clustering_metric})")
     dendrogram(linkage_matrix, labels=terms, orientation="right")
     plt.tight_layout()
-    out_path = os.path.join(cfg.directory_analysis, "analysis_ahc_dendrogram_jaccard.png")
-    plt.savefig(out_path)
+    plt.savefig(cfg.output_path("dendrogram.png"))
     plt.close()
     log(f"Hierarchical clustering dendrogram saved ({cfg.clustering_metric} / {cfg.linkage_method}).")

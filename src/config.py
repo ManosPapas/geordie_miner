@@ -24,6 +24,16 @@ class Config:
     directory_text: str
     directory_processed: str
 
+    @property
+    def directory_logs(self) -> str:
+        return os.path.join(self.directory_analysis, "logs")
+
+    def output_path(self, *parts: str) -> str:
+        return os.path.join(self.directory_analysis, *parts)
+
+    def log_path(self, name: str) -> str:
+        return os.path.join(self.directory_logs, name)
+
     # Language
     language: str
 
@@ -153,6 +163,7 @@ def init_directories(cfg: Config, stages: list[str] | None = None) -> None:
     With `stages`, preserves directories that earlier (skipped) stages produced.
     """
     os.makedirs(cfg.directory_analysis, exist_ok=True)
+    os.makedirs(cfg.directory_logs, exist_ok=True)
 
     if stages is None or "ingest" in stages:
         for d in (cfg.directory_text, cfg.directory_processed):
@@ -161,7 +172,7 @@ def init_directories(cfg: Config, stages: list[str] | None = None) -> None:
         os.makedirs(cfg.directory_text)
         os.makedirs(cfg.directory_processed)
         # corpus stats file is append-only — clear it on full ingest
-        stats_path = os.path.join(cfg.directory_analysis, "analysis_corpus.txt")
+        stats_path = cfg.output_path("corpus_stats.txt")
         if os.path.exists(stats_path):
             os.remove(stats_path)
         return
@@ -175,9 +186,8 @@ def init_directories(cfg: Config, stages: list[str] | None = None) -> None:
 def write_config_log(cfg: Config) -> None:
     """Write a snapshot of the resolved configuration to the analysis directory."""
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_path = os.path.join(cfg.directory_analysis, "_log_config.log")
     lines = [f"Log created on: {stamp}", "", "Resolved configuration:", ""]
     for key, value in asdict(cfg).items():
         lines.append(f"{key} = {value}")
-    with open(log_path, "w", encoding="utf-8") as f:
+    with open(cfg.log_path("config_used.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
