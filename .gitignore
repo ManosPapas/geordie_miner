@@ -2,27 +2,23 @@
 # Geordie Miner — .gitignore
 # ============================================================
 
-# ---- Analysis output (regenerated on every run) ----
-# The script writes to analyis_<dataset>/ (note original spelling).
-# Match both the typo'd and corrected forms.
-analyis_*/
-analysis_*/
-py-text-mining/analyis_*/
-py-text-mining/analysis_*/
-
-# ---- Input data (academic papers / PDFs) ----
-# Likely copyrighted journal articles — keep out of the repo by default.
+# ---- Input data (likely copyrighted journal articles) ----
+# Keep the folder, ignore its contents. Drop your corpus(es) into data/<name>/.
 # Remove these lines (or use `git add -f`) if you want to track a corpus.
-data_*/
-py-text-mining/data_*/
+data/*
+!data/.gitkeep
+
+# ---- Analysis output (regenerated on every run) ----
+output/*
+!output/.gitkeep
 
 # ---- NLTK data (downloaded on first run) ----
 _nltk_data/
-py-text-mining/_nltk_data/
 
 # ---- Logs and captured terminal output ----
 *.log
 output.txt
+comparison_report.md
 
 # ---- Python ----
 __pycache__/
@@ -46,29 +42,28 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual environments
+# ---- Virtual environments ----
 .venv/
 venv/
 env/
 ENV/
 .env
 
-# Jupyter
+# ---- Jupyter ----
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
-# pytest / coverage
+# ---- Tooling caches ----
 .pytest_cache/
 .coverage
 .coverage.*
 htmlcov/
 .tox/
 .nox/
-
-# Type checkers
 .mypy_cache/
 .pyre/
 .pytype/
+.ruff_cache/
 
 # ---- IDE / editor ----
 .idea/

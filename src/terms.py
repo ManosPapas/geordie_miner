@@ -10,8 +10,8 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from wordcloud import WordCloud
 
-from gm_config import Config
-from gm_preprocess import lemmatise_text
+from config import Config
+from preprocess import lemmatise_text
 
 
 def _term_table(corpus: List[List[str]], top_n: int) -> pd.DataFrame:

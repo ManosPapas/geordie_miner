@@ -15,8 +15,8 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import NMF
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 
-from gm_config import Config
-from gm_preprocess import lemmatise_text
+from config import Config
+from preprocess import lemmatise_text
 
 
 def load_documents_for_topics(cfg: Config) -> tuple[list[str], list[str]]:

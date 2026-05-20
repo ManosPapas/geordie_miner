@@ -15,7 +15,7 @@ from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
 from tqdm import tqdm
 
-from gm_config import Config
+from config import Config
 
 
 _lemmatiser = WordNetLemmatizer()

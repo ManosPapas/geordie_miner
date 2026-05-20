@@ -67,11 +67,14 @@ class Config:
     terms_per_topic_hdp: int
 
 
-def load_config(config_path: str, data_dir: str) -> Config:
+def load_config(config_path: str, data_dir: str, output_base: str = "output") -> Config:
     """Parse the .ini-style config file and return a typed Config.
 
     Validates that the config file and data directory exist before returning.
-    Output directory names are derived from `data_dir`.
+    Output directory is `<output_base>/<basename(data_dir)>`.
+    Stopwords / substitutions paths in the config are resolved relative to the
+    config file's location (so a `config/config.txt` referencing `stopwords.txt`
+    points at `config/stopwords.txt`).
     """
     if not os.path.exists(config_path):
         sys.exit(f"Error: configuration file '{config_path}' not found.")
@@ -83,7 +86,12 @@ def load_config(config_path: str, data_dir: str) -> Config:
     if not cp.sections():
         sys.exit(f"Error: no sections found in config '{config_path}'.")
 
-    directory_analysis = f"analysis_{os.path.basename(os.path.normpath(data_dir))}"
+    config_dir = os.path.dirname(os.path.abspath(config_path))
+
+    def resolve_relative_to_config(value: str) -> str:
+        return value if os.path.isabs(value) else os.path.join(config_dir, value)
+
+    directory_analysis = os.path.join(output_base, os.path.basename(os.path.normpath(data_dir)))
     directory_text = os.path.join(directory_analysis, "text")
     directory_processed = os.path.join(directory_analysis, "text_processed")
 
@@ -99,8 +107,8 @@ def load_config(config_path: str, data_dir: str) -> Config:
 
         language=cp.get("default", "language", fallback="english"),
 
-        stopwords_file=cp.get("preprocessing", "stopwords_file", fallback="stopwords.txt"),
-        substitutions_file=cp.get("preprocessing", "substitutions_file", fallback="substitutions.txt"),
+        stopwords_file=resolve_relative_to_config(cp.get("preprocessing", "stopwords_file", fallback="stopwords.txt")),
+        substitutions_file=resolve_relative_to_config(cp.get("preprocessing", "substitutions_file", fallback="substitutions.txt")),
         min_frequency=cp.getint("preprocessing", "min_frequency", fallback=5),
 
         top_n_terms=cp.getint("term_analysis", "top_n_terms", fallback=200),

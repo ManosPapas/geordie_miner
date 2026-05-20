@@ -1,13 +1,13 @@
 """Compare two or more Geordie Miner runs.
 
 Reads `analysis_terms_single_lemmatised.csv` and the topic-model output files from each
-analysis directory, then writes a single markdown report that highlights overlap and
+output directory, then writes a single markdown report that highlights overlap and
 divergence in top terms / topic words across runs.
 
 Usage:
-    python compare.py                                       # auto-discovers ./analysis_*
-    python compare.py analysis_a analysis_b analysis_c      # explicit list
-    python compare.py --out my_report.md analysis_*
+    python compare.py                                # auto-discovers ./output/*
+    python compare.py output/a output/b output/c     # explicit list
+    python compare.py --out my_report.md output/*
 """
 
 from __future__ import annotations
@@ -23,18 +23,18 @@ import pandas as pd
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Compare top terms + topic models across analysis runs.")
-    p.add_argument("dirs", nargs="*", help="Analysis directories. If empty, auto-discovers ./analysis_*.")
+    p.add_argument("dirs", nargs="*", help="Analysis directories. If empty, auto-discovers ./output/*.")
     p.add_argument("--out", default="comparison_report.md", help="Markdown output path (default: comparison_report.md).")
     p.add_argument("--top", type=int, default=50, help="How many top terms to compare per run (default: 50).")
     return p.parse_args(argv)
 
 
 def discover_dirs() -> List[str]:
-    return sorted(d for d in glob.glob("analysis_*") if os.path.isdir(d))
+    return sorted(d for d in glob.glob(os.path.join("output", "*")) if os.path.isdir(d))
 
 
 def short_name(path: str) -> str:
-    return os.path.basename(os.path.normpath(path)).removeprefix("analysis_") or path
+    return os.path.basename(os.path.normpath(path)) or path
 
 
 def load_top_terms(directory: str, top: int) -> List[str]:

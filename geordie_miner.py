@@ -1,13 +1,13 @@
 """Geordie Miner — text mining pipeline for academic corpora.
 
 Usage:
-    python geordie_miner.py [config_file] [data_dir [data_dir ...]] [options]
+    python geordie_miner.py DATA_DIR [DATA_DIR ...] [options]
 
 Examples:
-    python geordie_miner.py                                 # uses defaults from config.txt
-    python geordie_miner.py config.txt data_fulltext
-    python geordie_miner.py config.txt data_a data_b data_c   # process three corpora
-    python geordie_miner.py --stages ingest,preprocess,terms data_fulltext
+    python geordie_miner.py data/fulltext
+    python geordie_miner.py data/fulltext data/no_refs data/no_method
+    python geordie_miner.py data/fulltext --stages topics
+    python geordie_miner.py data/fulltext --config config/config.txt
 
 Stages (in order):
     ingest     PDF -> text + numbered prefix
@@ -27,16 +27,21 @@ import sys
 from datetime import datetime
 from typing import List
 
-from gm_config import Config, init_directories, load_config, write_config_log
-from gm_ingest import convert_pdfs_to_text, ensure_nltk_resources
-from gm_logging import make_logger
-from gm_phrases import load_processed_corpus, run_hierarchical_clustering, run_phrase_analysis
-from gm_preprocess import descriptive_stats, load_stopwords, load_substitutions, preprocess_corpus
-from gm_terms import run_term_analysis
-from gm_topics import run_topic_models
+# Make src/ importable when invoked from the repo root.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
+
+from config import Config, init_directories, load_config, write_config_log  # noqa: E402
+from ingest import convert_pdfs_to_text, ensure_nltk_resources  # noqa: E402
+from logger import make_logger  # noqa: E402
+from phrases import run_hierarchical_clustering, run_phrase_analysis, load_processed_corpus  # noqa: E402
+from preprocess import descriptive_stats, load_stopwords, load_substitutions, preprocess_corpus  # noqa: E402
+from terms import run_term_analysis  # noqa: E402
+from topics import run_topic_models  # noqa: E402
 
 
 ALL_STAGES = ["ingest", "preprocess", "terms", "phrases", "topics"]
+DEFAULT_CONFIG = os.path.join("config", "config.txt")
+DEFAULT_OUTPUT_BASE = "output"
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
@@ -46,8 +51,9 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="See README.md for full documentation.",
     )
-    p.add_argument("config", nargs="?", default="config.txt", help="Path to .ini config file (default: config.txt).")
-    p.add_argument("data_dirs", nargs="*", default=["data"], help="One or more directories of PDFs/.txt files to process (default: data).")
+    p.add_argument("data_dirs", nargs="+", help="One or more directories of PDFs/.txt files to process.")
+    p.add_argument("--config", default=DEFAULT_CONFIG, help=f"Path to .ini config file (default: {DEFAULT_CONFIG}).")
+    p.add_argument("--out", default=DEFAULT_OUTPUT_BASE, help=f"Base directory for analysis output (default: {DEFAULT_OUTPUT_BASE}).")
     p.add_argument(
         "--stages",
         default=",".join(ALL_STAGES),
@@ -129,7 +135,7 @@ def main(argv: List[str] | None = None) -> int:
 
     for data_dir in args.data_dirs:
         try:
-            cfg = load_config(args.config, data_dir)
+            cfg = load_config(args.config, data_dir, output_base=args.out)
             run_one(cfg, stages)
         except SystemExit:
             raise

@@ -18,8 +18,8 @@ from nltk.util import ngrams
 from scipy.cluster.hierarchy import dendrogram, linkage
 from scipy.spatial.distance import pdist
 
-from gm_config import Config
-from gm_preprocess import lemmatise_text
+from config import Config
+from preprocess import lemmatise_text
 
 
 def load_processed_corpus(cfg: Config) -> Tuple[List[str], List[str]]:
