@@ -4,10 +4,12 @@
 
 # ---- Input data (likely copyrighted journal articles) ----
 # Drop your corpus(es) into data/<name>/ — they stay local.
-data/
+data/*
+!data/README.md
 
 # ---- Analysis output (regenerated on every run) ----
-output/
+output/*
+!output/README.md
 
 # ---- Caches (auto-downloaded NLTK resources, etc) ----
 .cache/
