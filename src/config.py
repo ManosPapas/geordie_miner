@@ -78,6 +78,75 @@ class Config:
     nmf_max_iter: int
     terms_per_topic_hdp: int
 
+    # Runtime / parallelism
+    max_cpu_count: int
+
+    # Ingest
+    bulk_text_mode: str          # auto | on | off
+    bulk_record_split: str       # auto | line | blank
+
+    # Preprocessing (extended)
+    remove_references: bool
+    strip_citation_markers: bool
+    preserve_sentences: bool
+
+    # Topic-model enable switches
+    enable_kmeans: bool
+    enable_lda: bool
+    enable_nmf: bool
+    enable_hdp: bool
+    enable_bertopic: bool
+
+    # Linguistic annotation
+    annotation_enable: bool
+    annotation_engine: str       # spacy | stanza
+    annotation_model: str
+    annotation_tasks: list       # subset of: sentence, pos, ner
+
+    # Longitudinal analysis
+    longitudinal_enable: bool
+    longitudinal_bracket_years: str   # auto | 5 | 10
+    longitudinal_min_docs: int
+
+    # Stability
+    stability_seeds: list        # explicit, fixed seed schedule
+
+    # --- Wave 2 ---
+
+    # Bibliographic import (BibTeX / RIS / CSV)
+    csv_mapping: str             # "field:Column,field:Column" overrides for CSV import
+
+    # External metadata providers / enrichment
+    enrich_enable: bool
+    provider: str                # openalex | crossref | scopus
+    provider_fallback: str       # provider to fall back to (e.g. openalex)
+    provider_max: int            # cap records to enrich (0 = no cap)
+    provider_mailto: str         # contact email for OpenAlex/Crossref "polite pool"
+
+    # References / citation analysis
+    compute_impact: bool
+    compute_cocitation: bool
+    compute_coupling: bool
+
+    # Collaboration / co-authorship
+    collaboration_enable: bool
+
+    # Full-text lexical analysis
+    lexical_enable: bool
+    lexicons_dir: str
+    lexical_context_samples: int
+
+    # Topic evolution
+    topic_evolution_enable: bool
+
+    # Science mapping
+    science_map_enable: bool
+
+    # Visuals
+    visual_density: str          # low | medium | high
+    visual_label_filtering: bool
+    visual_colour_scheme: str
+
 
 def load_config(
     config_path: str,
@@ -93,17 +162,24 @@ def load_config(
     config file's location (so `config/config.ini` referencing `stopwords.txt`
     points at `config/stopwords.txt`).
     """
-    if not os.path.exists(config_path):
-        sys.exit(f"Error: configuration file '{config_path}' not found.")
+    # `config_path` may be a single path or a list of paths (base + profile
+    # overlay); later files override earlier ones.
+    paths = [config_path] if isinstance(config_path, str) else list(config_path)
+    for p in paths:
+        if not os.path.exists(p):
+            sys.exit(f"Error: configuration file '{p}' not found.")
     if not os.path.exists(data_dir):
         sys.exit(f"Error: data directory '{data_dir}' not found.")
 
-    cp = configparser.ConfigParser()
-    cp.read(config_path)
+    # inline_comment_prefixes lets users put `# comment` after a value on the same
+    # line (as the README examples show), not just on their own line.
+    cp = configparser.ConfigParser(inline_comment_prefixes=("#",))
+    cp.read(paths)
     if not cp.sections():
-        sys.exit(f"Error: no sections found in config '{config_path}'.")
+        sys.exit(f"Error: no sections found in config '{paths}'.")
 
-    config_dir = os.path.dirname(os.path.abspath(config_path))
+    # Relative paths (stopwords, lexicons, ...) resolve against the base config dir.
+    config_dir = os.path.dirname(os.path.abspath(paths[0]))
 
     def resolve_relative_to_config(value: str) -> str:
         return value if os.path.isabs(value) else os.path.join(config_dir, value)
@@ -116,8 +192,14 @@ def load_config(
     figsize_raw = cp.get("phrase_analysis", "dendrogram_figsize", fallback="10,7")
     dendrogram_figsize = tuple(int(x.strip()) for x in figsize_raw.split(","))  # type: ignore[assignment]
 
-    return Config(
-        config_path=os.path.abspath(config_path),
+    def _int_list(value: str) -> list:
+        return [int(s.strip()) for s in value.split(",") if s.strip()]
+
+    def _str_list(value: str) -> list:
+        return [s.strip().lower() for s in value.split(",") if s.strip()]
+
+    cfg = Config(
+        config_path=os.path.abspath(paths[-1]),
         directory_data=data_dir,
         directory_analysis=directory_analysis,
         directory_text=directory_text,
@@ -163,7 +245,66 @@ def load_config(
         nmf_max_iter=cp.getint("topic_nmf", "nmf_max_iter", fallback=500),
 
         terms_per_topic_hdp=cp.getint("topic_hdp", "terms_per_topic_hdp", fallback=10),
+
+        max_cpu_count=cp.getint("default", "max_cpu_count", fallback=4),
+
+        bulk_text_mode=cp.get("ingest", "bulk_text_mode", fallback="auto").strip().lower(),
+        bulk_record_split=cp.get("ingest", "bulk_record_split", fallback="auto").strip().lower(),
+
+        remove_references=cp.getboolean("preprocessing", "remove_references", fallback=False),
+        strip_citation_markers=cp.getboolean("preprocessing", "strip_citation_markers", fallback=False),
+        preserve_sentences=cp.getboolean("preprocessing", "preserve_sentences", fallback=False),
+
+        enable_kmeans=cp.getboolean("topic_modelling", "enable_kmeans", fallback=True),
+        enable_lda=cp.getboolean("topic_modelling", "enable_lda", fallback=True),
+        enable_nmf=cp.getboolean("topic_modelling", "enable_nmf", fallback=True),
+        enable_hdp=cp.getboolean("topic_modelling", "enable_hdp", fallback=True),
+        enable_bertopic=cp.getboolean("topic_modelling", "enable_bertopic", fallback=True),
+
+        annotation_enable=cp.getboolean("annotation", "enable", fallback=False),
+        annotation_engine=cp.get("annotation", "annotation_engine", fallback="spacy").strip().lower(),
+        annotation_model=cp.get("annotation", "annotation_model", fallback="en_core_web_sm").strip(),
+        annotation_tasks=_str_list(cp.get("annotation", "annotation_tasks", fallback="sentence,pos,ner")),
+
+        longitudinal_enable=cp.getboolean("longitudinal", "enable", fallback=False),
+        longitudinal_bracket_years=cp.get("longitudinal", "longitudinal_bracket_years", fallback="auto").strip().lower(),
+        longitudinal_min_docs=cp.getint("longitudinal", "longitudinal_min_docs", fallback=3),
+
+        stability_seeds=_int_list(cp.get("stability", "stability_seeds", fallback="42,123,2024,7,99")),
+
+        csv_mapping=cp.get("import", "csv_mapping", fallback="").strip(),
+
+        enrich_enable=cp.getboolean("providers", "enrich_enable", fallback=False),
+        provider=cp.get("providers", "provider", fallback="openalex").strip().lower(),
+        provider_fallback=cp.get("providers", "provider_fallback", fallback="openalex").strip().lower(),
+        provider_max=cp.getint("providers", "provider_max", fallback=0),
+        provider_mailto=cp.get("providers", "provider_mailto", fallback="").strip(),
+
+        compute_impact=cp.getboolean("references", "compute_impact", fallback=True),
+        compute_cocitation=cp.getboolean("references", "compute_cocitation", fallback=True),
+        compute_coupling=cp.getboolean("references", "compute_coupling", fallback=True),
+
+        collaboration_enable=cp.getboolean("collaboration", "enable", fallback=False),
+
+        lexical_enable=cp.getboolean("lexical", "enable", fallback=False),
+        lexicons_dir=resolve_relative_to_config(cp.get("lexical", "lexicons_dir", fallback="lexicons")),
+        lexical_context_samples=cp.getint("lexical", "context_samples", fallback=5),
+
+        topic_evolution_enable=cp.getboolean("topic_evolution", "enable", fallback=False),
+
+        science_map_enable=cp.getboolean("science_map", "enable", fallback=False),
+
+        visual_density=cp.get("visuals", "density", fallback="medium").strip().lower(),
+        visual_label_filtering=cp.getboolean("visuals", "label_filtering", fallback=True),
+        visual_colour_scheme=cp.get("visuals", "colour_scheme", fallback="viridis").strip(),
     )
+
+    # `remove_references` is a friendly shortcut for excluding the references
+    # section during preprocessing — fold it into the existing mechanism.
+    if cfg.remove_references and "references" not in cfg.exclude_sections:
+        cfg.exclude_sections.append("references")
+
+    return cfg
 
 
 def init_directories(cfg: Config, stages: list[str] | None = None) -> None:

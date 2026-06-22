@@ -30,6 +30,36 @@ scikit-learn>=1.4
 # Better tokenisation + lemmatisation (optional, enable via config)
 spacy>=3.7
 
+# ---- Linguistic annotation back ends (sentence segmentation / POS / NER) ----
+#
+# spaCy (above) and Stanza are the two pluggable annotation engines. Stanza pulls
+# in PyTorch and downloads its model bundle on first use.
+#
+# Supply-chain note: pip / requirements.txt has no native release-age gate, so —
+# per policy — the dependencies added here are PINNED to exact versions and bumps
+# go through review (e.g. Dependabot); we do NOT add a custom delay mechanism.
+stanza==1.12.2
+
+# Run-configuration export (reproducibility). Used-but-undeclared previously.
+PyYAML==6.0.3
+
+# spaCy English model for the annotation stage / spaCy lemmatisation backend,
+# pinned to an exact release for reproducibility. Equivalent one-off command:
+#     python -m spacy download en_core_web_sm
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+
+# ---- Bibliographic import + external metadata providers (Wave 2) ----
+#
+# BibTeX / RIS / CSV import, country normalisation, and HTTP for the OpenAlex /
+# Crossref / Scopus providers. Pinned exact (pip has no native release-age gate;
+# bumps go through review — no custom delay mechanism). The Scopus backend uses
+# `requests` directly against the Elsevier REST API (no extra client needed) and
+# only activates when SCOPUS_API_KEY is set.
+bibtexparser==1.4.4
+rispy==0.10.0
+pycountry==26.2.16
+requests==2.34.2
+
 # Reference / bibliography extraction
 refextract>=1.1
 

@@ -82,51 +82,79 @@ def run_topic_models(cfg: Config, log: Callable[[str], None]) -> Dict:
         cfg.topic_modelling_multi3,
     ]
 
+    n_docs = len(docs)
+
+    def _ks(base: int) -> List[int]:
+        """K values to run, dropping any that exceed the document count
+        (KMeans/LDA/NMF require n_topics <= n_samples)."""
+        ks = _topic_ks(base, multipliers)
+        valid = [k for k in ks if 2 <= k <= n_docs]
+        dropped = [k for k in ks if k > n_docs]
+        if dropped:
+            log(f"  note: skipping K={dropped} — only {n_docs} documents in the corpus.")
+        return valid
+
     assignments: Dict[str, np.ndarray] = {}
     top_words: Dict[str, List[List[str]]] = {}
     doc_counts: Dict[str, List[int]] = {}
     top_docs_rows: List[Tuple] = []
 
-    for k in _topic_ks(cfg.kmeans_topics, multipliers):
-        labels, words, counts, top = _kmeans(cfg, docs, doc_ids, k, log)
-        assignments[f"KMeans_{k}"] = labels
-        top_words[f"KMeans_{k}"] = words
-        doc_counts[f"KMeans_{k}"] = counts
-        top_docs_rows.extend(top)
+    # Each method can be turned off in config (enable_kmeans/lda/nmf/hdp/bertopic).
+    if getattr(cfg, "enable_kmeans", True):
+        for k in _ks(cfg.kmeans_topics):
+            labels, words, counts, top = _kmeans(cfg, docs, doc_ids, k, log)
+            assignments[f"KMeans_{k}"] = labels
+            top_words[f"KMeans_{k}"] = words
+            doc_counts[f"KMeans_{k}"] = counts
+            top_docs_rows.extend(top)
+    else:
+        log("  KMeans disabled (enable_kmeans=false).")
 
-    for k in _topic_ks(cfg.lda_topics, multipliers):
-        labels, words, counts, top = _lda(cfg, docs, doc_ids, k, log)
-        assignments[f"LDA_{k}"] = labels
-        top_words[f"LDA_{k}"] = words
-        doc_counts[f"LDA_{k}"] = counts
-        top_docs_rows.extend(top)
+    if getattr(cfg, "enable_lda", True):
+        for k in _ks(cfg.lda_topics):
+            labels, words, counts, top = _lda(cfg, docs, doc_ids, k, log)
+            assignments[f"LDA_{k}"] = labels
+            top_words[f"LDA_{k}"] = words
+            doc_counts[f"LDA_{k}"] = counts
+            top_docs_rows.extend(top)
+    else:
+        log("  LDA disabled (enable_lda=false).")
 
-    for k in _topic_ks(cfg.nmf_topics, multipliers):
-        labels, words, counts, top = _nmf(cfg, docs, doc_ids, k, log)
-        assignments[f"NMF_{k}"] = labels
-        top_words[f"NMF_{k}"] = words
-        doc_counts[f"NMF_{k}"] = counts
-        top_docs_rows.extend(top)
+    if getattr(cfg, "enable_nmf", True):
+        for k in _ks(cfg.nmf_topics):
+            labels, words, counts, top = _nmf(cfg, docs, doc_ids, k, log)
+            assignments[f"NMF_{k}"] = labels
+            top_words[f"NMF_{k}"] = words
+            doc_counts[f"NMF_{k}"] = counts
+            top_docs_rows.extend(top)
+    else:
+        log("  NMF disabled (enable_nmf=false).")
 
-    labels, words, counts, top, n_hdp = _hdp(cfg, docs, doc_ids, log)
-    assignments[f"HDP_{n_hdp}"] = labels
-    top_words[f"HDP_{n_hdp}"] = words
-    doc_counts[f"HDP_{n_hdp}"] = counts
-    top_docs_rows.extend(top)
+    if getattr(cfg, "enable_hdp", True):
+        labels, words, counts, top, n_hdp = _hdp(cfg, docs, doc_ids, log)
+        assignments[f"HDP_{n_hdp}"] = labels
+        top_words[f"HDP_{n_hdp}"] = words
+        doc_counts[f"HDP_{n_hdp}"] = counts
+        top_docs_rows.extend(top)
+    else:
+        log("  HDP disabled (enable_hdp=false).")
 
     # BERTopic — embedding-based topic model. Optional; returns None if dep is missing.
     embeddings = None
-    try:
-        from bertopic_model import run_bertopic
-        bt = run_bertopic(cfg, docs, doc_ids, log)
-        if bt is not None:
-            assignments[bt["label"]] = bt["labels"]
-            top_words[bt["label"]] = bt["top_words"]
-            doc_counts[bt["label"]] = bt["counts"]
-            top_docs_rows.extend(bt["top_docs"])
-            embeddings = bt["embeddings"]
-    except Exception as e:
-        log(f"  BERTopic failed (non-fatal): {e}")
+    if getattr(cfg, "enable_bertopic", True):
+        try:
+            from bertopic_model import run_bertopic
+            bt = run_bertopic(cfg, docs, doc_ids, log)
+            if bt is not None:
+                assignments[bt["label"]] = bt["labels"]
+                top_words[bt["label"]] = bt["top_words"]
+                doc_counts[bt["label"]] = bt["counts"]
+                top_docs_rows.extend(bt["top_docs"])
+                embeddings = bt["embeddings"]
+        except Exception as e:
+            log(f"  BERTopic failed (non-fatal): {e}")
+    else:
+        log("  BERTopic disabled (enable_bertopic=false).")
 
     _write_assignments_csv(cfg, doc_ids, assignments)
     _write_top_docs_csv(cfg, top_docs_rows)
@@ -155,6 +183,24 @@ def _write_topic_words_file(
             n_docs = doc_counts[i] if i < len(doc_counts) else 0
             f.write(f"Topic {i + 1} ({n_docs} docs): ")
             f.write(", ".join(f"{w} ({s:.4f})" for w, s in words) + "\n")
+
+
+def _write_doc2topic_file(
+    cfg: Config,
+    filename: str,
+    labels,
+    doc_ids: List[str],
+) -> None:
+    """Write a `topics_<model>_<K>_doc2topic.txt` file: `doc_id, topic_number` per line.
+
+    Topic numbers are 1-indexed (so they match the topic rows in `topics_<model>_<K>.txt`).
+    This restores the per-model membership listing from the original pipeline so you can
+    quickly grep "which papers ended up in LDA-5 topic 3".
+    """
+    with open(cfg.output_path(filename), "w", encoding="utf-8") as f:
+        for idx, label in enumerate(labels):
+            doc_id = doc_ids[idx] if idx < len(doc_ids) else str(idx + 1)
+            f.write(f"{doc_id}, {int(label) + 1}\n")
 
 
 def _top_docs_for_topic(
@@ -199,11 +245,12 @@ def _kmeans(cfg: Config, docs: List[str], doc_ids: List[str], k: int, log: Calla
 
     counts = [int((labels == i).sum()) for i in range(k)]
     _write_topic_words_file(cfg, f"topics_kmeans_{k}.txt", top_words, counts)
+    _write_doc2topic_file(cfg, f"topics_kmeans_{k}_doc2topic.txt", labels, doc_ids)
 
     # For top docs: use negative distance to centroid as "score" (closer = higher).
     distances = model.transform(dtm)  # shape (n_docs, k), smaller = better
     scores = -distances
-    top_docs = _top_docs_for_topic(f"KMeans", k, scores, doc_ids, labels, k)
+    top_docs = _top_docs_for_topic("KMeans", k, scores, doc_ids, labels, k)
 
     log(f"KMeans completed: {k} topics.")
     return labels, top_words, counts, top_docs
@@ -240,6 +287,7 @@ def _lda(cfg: Config, docs: List[str], doc_ids: List[str], k: int, log: Callable
         for i in range(k)
     ]
     _write_topic_words_file(cfg, f"topics_lda_{k}.txt", top_words, counts)
+    _write_doc2topic_file(cfg, f"topics_lda_{k}_doc2topic.txt", labels, doc_ids)
 
     top_docs = _top_docs_for_topic("LDA", k, scores, doc_ids, labels, k)
     log(f"LDA completed: {k} topics.")
@@ -262,6 +310,7 @@ def _nmf(cfg: Config, docs: List[str], doc_ids: List[str], k: int, log: Callable
         idx = topic.argsort()[: -cfg.nmf_terms_per_topic - 1 : -1]
         top_words.append([(terms[j], float(topic[j])) for j in idx])
     _write_topic_words_file(cfg, f"topics_nmf_{k}.txt", top_words, counts)
+    _write_doc2topic_file(cfg, f"topics_nmf_{k}_doc2topic.txt", labels, doc_ids)
 
     top_docs = _top_docs_for_topic("NMF", k, scores, doc_ids, labels, k)
     log(f"NMF completed: {k} topics.")
@@ -289,6 +338,7 @@ def _hdp(cfg: Config, docs: List[str], doc_ids: List[str], log: Callable[[str], 
 
     top_words = [[(w, float(p)) for w, p in tw] for (_, tw) in results]
     _write_topic_words_file(cfg, "topics_hdp.txt", top_words, counts)
+    _write_doc2topic_file(cfg, "topics_hdp_doc2topic.txt", labels, doc_ids)
 
     top_docs = _top_docs_for_topic("HDP", n_topics, scores, doc_ids, labels, n_topics)
     log(f"HDP completed: {n_topics} topics.")

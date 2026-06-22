@@ -12,7 +12,7 @@ from typing import Callable, Dict, List, Tuple
 
 from nltk.corpus import stopwords as nltk_stopwords
 from nltk.stem import WordNetLemmatizer
-from nltk.tokenize import word_tokenize
+from nltk.tokenize import sent_tokenize, word_tokenize
 from tqdm import tqdm
 
 from config import Config
@@ -71,18 +71,30 @@ def lemmatise_text(text: str) -> List[str]:
 
 
 def load_stopwords(cfg: Config, log: Callable[[str], None]) -> List[str]:
-    """Load custom stopwords from file + NLTK stopwords for the configured language."""
+    """Load custom stopwords from file + NLTK stopwords for the configured language.
+
+    The stopwords file holds *user* stopwords only — domain-specific terms,
+    journal names, etc. Standard English stopwords come from NLTK automatically.
+    Lines starting with `#` are treated as comments and ignored.
+    """
     custom: List[str] = []
     if os.path.exists(cfg.stopwords_file):
         with open(cfg.stopwords_file, "r", encoding="utf-8") as f:
-            custom = [line.strip().lower() for line in f if line.strip()]
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                custom.append(line.lower())
 
     nltk_list = nltk_stopwords.words(cfg.language)
-    combined = custom + nltk_list
+    # Dedupe and sort longest-first so multi-word phrase stopwords (e.g. "et al")
+    # match before their constituent single words in the alternation regex built
+    # by `_remove_stopwords` (regex alternation is first-match-wins per position).
+    combined = sorted(set(custom) | set(nltk_list), key=lambda w: (-len(w), w))
 
     with open(cfg.log_path("stopwords_used.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(combined))
-    log(f"Stopwords loaded: {len(custom)} custom + {len(nltk_list)} NLTK ({cfg.language}).")
+    log(f"Stopwords loaded: {len(custom)} custom + {len(nltk_list)} NLTK ({cfg.language}) -> {len(combined)} unique.")
 
     return combined
 
@@ -97,7 +109,7 @@ def load_substitutions(cfg: Config, log: Callable[[str], None]) -> Dict[str, str
     with open(cfg.substitutions_file, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip().lower()
-            if not line:
+            if not line or line.startswith("#") or "," not in line:
                 continue
             original, replacement = line.split(",", 1)
             subs[original.strip()] = replacement.strip()
@@ -124,6 +136,72 @@ def _apply_substitutions(text: str, subs: Dict[str, str]) -> str:
     for original, replacement in subs.items():
         text = re.sub(rf"\b{re.escape(original)}\b[\s.,]*", replacement + "  ", text, flags=re.IGNORECASE)
     return text
+
+
+# Bracketed numeric citations [12], [3, 4-6] and parenthetical author-year
+# citations (Smith, 2020), (Smith et al., 2020; Lee 2019).
+_CITATION_BRACKET_RE = re.compile(r"\[\s*\d+(?:\s*[-,;]\s*\d+)*\s*\]")
+_CITATION_PAREN_RE = re.compile(
+    r"\([^()]*?[A-Za-z][^()]*?,?\s*(?:19|20)\d{2}[a-z]?[^()]*?\)"
+)
+
+
+def _strip_citation_markers(text: str) -> str:
+    """Remove inline citation markers (numeric brackets + author-year parens)."""
+    text = _CITATION_BRACKET_RE.sub(" ", text)
+    text = _CITATION_PAREN_RE.sub(" ", text)
+    return text
+
+
+def _clean_fragment(text: str, stopwords: List[str], subs: Dict[str, str], strip_citations: bool) -> str:
+    """Apply the standard token-level cleaning to a fragment (doc or sentence).
+
+    Mirrors the original inline sequence exactly when `strip_citations` is False,
+    minus the doc-level low-frequency filter and consecutive-duplicate collapse
+    (those are applied by the callers so frequency is counted at document level).
+    """
+    text = text.lower()
+    text = re.sub(r"-\s*\n\s*", "", text)                  # join hyphen-broken words
+    if strip_citations:
+        text = _strip_citation_markers(text)
+    text = _apply_substitutions(text, subs)
+    text = _remove_stopwords(text, stopwords)
+    text = re.sub(r"http\S+|www\.\S+", " ", text)          # links
+    text = re.sub(r"\(.*?\)", " ", text)                   # parens
+    text = re.sub(r"[^a-zA-Z\s]", " ", text)               # non-alphabetic
+    text = re.sub(r"\b\w{1}\b", " ", text)                 # single chars
+    text = _apply_substitutions(text, subs)                # again — picks up new boundaries
+    text = _remove_stopwords(text, stopwords)              # again
+    return text
+
+
+def _preprocess_doc_flat(raw: str, stopwords: List[str], subs: Dict[str, str], cfg: Config) -> str:
+    """Original behaviour: one flattened blob per document."""
+    text = _clean_fragment(raw, stopwords, subs, cfg.strip_citation_markers)
+    text = _remove_low_frequency_terms(text, cfg.min_frequency)
+    return _collapse_consecutive_duplicates(text)
+
+
+def _preprocess_doc_sentences(raw: str, stopwords: List[str], subs: Dict[str, str], cfg: Config) -> str:
+    """Sentence-preserving variant: one cleaned sentence per line.
+
+    Low-frequency filtering uses document-level counts (filtering within a single
+    sentence would erase almost everything), and consecutive-duplicate collapse is
+    applied per line.
+    """
+    cleaned = [_clean_fragment(s, stopwords, subs, cfg.strip_citation_markers) for s in sent_tokenize(raw)]
+    counts = Counter(" ".join(cleaned).split())
+    min_freq = cfg.min_frequency
+
+    out_lines: List[str] = []
+    for line in cleaned:
+        toks = line.split()
+        if min_freq > 1:
+            toks = [w for w in toks if counts[w] >= min_freq]
+        toks = collapse_consecutive_list(toks)
+        if toks:
+            out_lines.append(" ".join(toks))
+    return "\n".join(out_lines)
 
 
 def _remove_low_frequency_terms(text: str, min_frequency: int) -> str:
@@ -190,24 +268,20 @@ def preprocess_corpus(
         from sections import filter_text_excluding_sections
         log(f"  excluding sections from preprocess: {', '.join(excl)}")
 
+    preserve = bool(getattr(cfg, "preserve_sentences", False))
+    if preserve:
+        log("  preserve_sentences: writing one cleaned sentence per line.")
+
     for filename in tqdm(files, desc="Preprocessing"):
         with open(os.path.join(cfg.directory_text, filename), "r", encoding="utf-8") as f:
             raw = f.read()
         if excl:
             raw = filter_text_excluding_sections(raw, excl)
-        text = raw.lower()
 
-        text = re.sub(r"-\s*\n\s*", "", text)                  # join hyphen-broken words
-        text = _apply_substitutions(text, substitutions)
-        text = _remove_stopwords(text, stopwords)
-        text = re.sub(r"http\S+|www\.\S+", " ", text)          # links
-        text = re.sub(r"\(.*?\)", " ", text)                   # parens
-        text = re.sub(r"[^a-zA-Z\s]", " ", text)               # non-alphabetic
-        text = re.sub(r"\b\w{1}\b", " ", text)                 # single chars
-        text = _apply_substitutions(text, substitutions)       # again — picks up new boundaries
-        text = _remove_stopwords(text, stopwords)              # again
-        text = _remove_low_frequency_terms(text, cfg.min_frequency)
-        text = _collapse_consecutive_duplicates(text)          # kill `metaverse metaverse` noise
+        if preserve:
+            text = _preprocess_doc_sentences(raw, stopwords, substitutions, cfg)
+        else:
+            text = _preprocess_doc_flat(raw, stopwords, substitutions, cfg)
 
         with open(os.path.join(cfg.directory_processed, filename), "w", encoding="utf-8") as f:
             f.write(text)

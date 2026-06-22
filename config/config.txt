@@ -6,6 +6,26 @@
 # Language
 language = english
 
+# Cap worker processes for sklearn/joblib/loky (also silences the
+# "Could not find the number of physical cores" loky warning on some machines).
+max_cpu_count = 4
+
+################################################
+# Ingest Settings
+################################################
+[ingest]
+
+# Bulk text import: treat a SINGLE plain-text file as a document table (one
+# short document per record) — intended for thousands of social-media posts,
+# abstracts, etc. auto = enable automatically when the input directory holds
+# exactly one .txt file and no PDFs. on = always. off = never (one doc per file).
+bulk_text_mode = auto
+
+# How to split the bulk file into documents. auto = blank-line-separated blocks
+# if present, else one document per line. line = always one per line.
+# blank = always blank-line-separated records.
+bulk_record_split = auto
+
 ################################################
 # Preprocessing Settings
 ################################################
@@ -30,6 +50,20 @@ use_spacy = false
 # Leave blank to keep everything. Example:
 #     exclude_sections = references,acknowledgements,appendix
 exclude_sections =
+
+# Friendly shortcut: when true, the "references" section is removed before
+# preprocessing (equivalent to adding `references` to exclude_sections above).
+remove_references = false
+
+# Strip inline citation markers like [12], [3, 4] and (Smith, 2020) from the
+# text before tokenisation. Off by default (it can occasionally clip legitimate
+# parenthetical content).
+strip_citation_markers = false
+
+# Keep sentence structure in text_processed/ (one sentence per line). When on,
+# n-gram and co-occurrence windows will not cross sentence boundaries, and the
+# annotation stage gets clean sentences. Off = original behaviour (flattened).
+preserve_sentences = false
 
 ################################################
 # Term Analysis Settings
@@ -88,6 +122,13 @@ topic_modelling_multi1 = 2
 topic_modelling_multi2 = 3
 topic_modelling_multi3 = 4
 
+# Turn individual topic-analysis methods on/off (all on by default).
+enable_kmeans   = true
+enable_lda      = true
+enable_nmf      = true
+enable_hdp      = true
+enable_bertopic = true
+
 
 [topic_kmeans]
 # KMeans
@@ -109,3 +150,117 @@ nmf_max_iter = 1000
 [topic_hdp]
 # HDP
 terms_per_topic_hdp = 10
+
+################################################
+# Linguistic Annotation (optional stage)
+################################################
+[annotation]
+# Run sentence segmentation + POS tagging + NER and export structured
+# annotations (annotations/*.jsonl) reusable by later analysis. Off by default.
+enable = false
+
+# Engine: spacy (needs `python -m spacy download <model>`) or stanza
+# (needs `pip install stanza`; first use downloads the model).
+annotation_engine = spacy
+
+# Model name. spaCy: en_core_web_sm. Stanza: a language code, e.g. en.
+annotation_model = en_core_web_sm
+
+# Which tasks to run (subset of: sentence, pos, ner).
+annotation_tasks = sentence, pos, ner
+
+################################################
+# Longitudinal Analysis (optional stage)
+################################################
+[longitudinal]
+# Split the corpus into publication-year brackets and run the analysis on each
+# subset, so you can see how clusters shift over time. Needs the metadata stage
+# to have extracted years. Off by default. Results land in
+# output/<name>/longitudinal-<start>-<end>/.
+enable = false
+
+# Bracket width in years: auto (5 if the corpus spans <= 25 years, else 10), 5, or 10.
+longitudinal_bracket_years = auto
+
+# Skip brackets with fewer than this many documents (too small to model).
+longitudinal_min_docs = 3
+
+################################################
+# Stability Settings
+################################################
+[stability]
+# Fixed, explicit seed schedule for the multi-seed stability re-runs. Declaring
+# seeds up front (rather than picking opportunistically) is good reproducibility
+# practice — variability is reported across exactly these seeds.
+stability_seeds = 42, 123, 2024, 7, 99
+
+################################################
+# Bibliographic import (BibTeX / RIS / CSV)
+################################################
+[import]
+# Optional column overrides for CSV imports, e.g.
+#   csv_mapping = title:Article Title, abstract:Abstract, year:Year, doi:DOI
+# Leave blank to use the built-in defaults (case-insensitive common names).
+csv_mapping =
+
+################################################
+# External metadata providers / enrichment
+################################################
+[providers]
+# Enrich extracted metadata from an online source (overrides/fills fields and
+# records provenance). Off by default. Also used by the `fetch` subcommand.
+enrich_enable = false
+
+# openalex (free, no key) | crossref (free) | scopus (needs SCOPUS_API_KEY env var)
+provider          = openalex
+provider_fallback = openalex
+
+# Cap how many records to enrich (0 = no cap). Be polite to free APIs.
+provider_max = 0
+
+# Contact email for the OpenAlex / Crossref "polite pool" (recommended).
+provider_mailto =
+
+################################################
+# Citation analysis (part of the references stage)
+################################################
+[references]
+compute_impact     = true     # in/out degree + centralities for docs & venues
+compute_cocitation = true     # co-citation matrices/networks
+compute_coupling   = true     # bibliographic coupling matrices/networks
+
+################################################
+# Collaboration / co-authorship (optional stage)
+################################################
+[collaboration]
+enable = false
+
+################################################
+# Full-text lexical analysis (optional stage)
+################################################
+[lexical]
+enable = false
+# Folder of thematic lexicons; one concept per file (config/lexicons/<concept>.txt),
+# one term/phrase per line. Path is relative to this config file.
+lexicons_dir   = lexicons
+context_samples = 5           # example sentences exported per concept
+
+################################################
+# Topic evolution (optional stage)
+################################################
+[topic_evolution]
+enable = false
+
+################################################
+# Science mapping (optional stage)
+################################################
+[science_map]
+enable = false
+
+################################################
+# Visual styling for science-mapping figures
+################################################
+[visuals]
+density         = medium      # low | medium | high (caps nodes/points)
+label_filtering = true        # thin labels on dense plots
+colour_scheme   = viridis

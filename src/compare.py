@@ -11,7 +11,7 @@ import glob
 import os
 from typing import Dict, List, Tuple
 
-import pandas as pd
+from corpus_io import top_terms, topic_files
 
 
 def discover_dirs(base: str = "output") -> List[str]:
@@ -20,25 +20,6 @@ def discover_dirs(base: str = "output") -> List[str]:
 
 def short_name(path: str) -> str:
     return os.path.basename(os.path.normpath(path)) or path
-
-
-def load_top_terms(directory: str, top: int) -> List[str]:
-    csv_path = os.path.join(directory, "terms_lemmatised.csv")
-    if not os.path.exists(csv_path):
-        return []
-    df = pd.read_csv(csv_path).head(top)
-    return df["Term"].astype(str).str.lower().tolist()
-
-
-def load_topic_files(directory: str) -> Dict[str, str]:
-    """Map topic-model label -> file contents for the per-topic word files."""
-    out: Dict[str, str] = {}
-    for filename in sorted(os.listdir(directory)):
-        if filename.startswith("topics_") and filename.endswith(".txt"):
-            label = filename.removeprefix("topics_").removesuffix(".txt")
-            with open(os.path.join(directory, filename), "r", encoding="utf-8") as f:
-                out[label] = f.read()
-    return out
 
 
 def compute_overlap(term_lists: Dict[str, List[str]]) -> List[Tuple[str, str, int, float]]:
@@ -58,7 +39,7 @@ def compute_overlap(term_lists: Dict[str, List[str]]) -> List[Tuple[str, str, in
 
 def write_report(out_path: str, dirs: List[str], top: int) -> None:
     short = {d: short_name(d) for d in dirs}
-    term_lists = {short[d]: load_top_terms(d, top) for d in dirs}
+    term_lists = {short[d]: top_terms(d, top) for d in dirs}
     overlap = compute_overlap(term_lists)
 
     lines: List[str] = []
@@ -112,7 +93,7 @@ def write_report(out_path: str, dirs: List[str], top: int) -> None:
     for d in dirs:
         lines.append(f"### `{short[d]}`")
         lines.append("")
-        topics = load_topic_files(d)
+        topics = topic_files(d)
         if not topics:
             lines.append("_(no topic-model output found)_")
             lines.append("")

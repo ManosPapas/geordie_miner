@@ -1,0 +1,16 @@
+# Balanced profile — overlays config/config.txt and enables the main Wave-2
+# analyses (bibliometric networks, lexical concepts, topic evolution, science
+# mapping). Annotation stays off (it needs a downloaded model; enable manually).
+# Use with:  python geordie_miner.py run <data_dir> --profile balanced
+
+[collaboration]
+enable = true
+
+[lexical]
+enable = true
+
+[topic_evolution]
+enable = true
+
+[science_map]
+enable = true

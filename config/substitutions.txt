@@ -1,4 +1,12 @@
-vr,virtualreality
-ar,augmentedreality
-virtual reality,virtualreality
-augmented reality,augmentedreality
+# User substitutions — one `original,replacement` pair per line.
+#
+# The pipeline applies these to every document before stopword removal and
+# tokenisation. Useful for collapsing synonyms or expanding acronyms so they
+# count as a single concept across the corpus.
+#
+# Examples (uncomment to use):
+# vr,virtualreality
+# ar,augmentedreality
+# virtual reality,virtualreality
+# augmented reality,augmentedreality
+# machine learning,machinelearning

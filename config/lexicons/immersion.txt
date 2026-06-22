@@ -1,0 +1,11 @@
+# Example thematic lexicon. The filename (without .txt) is the concept name.
+# One term or phrase per line; lines starting with # are ignored. Matching is
+# case-insensitive and whole-word/phrase. Add your own <concept>.txt files here
+# and enable the lexical stage ([lexical] enable = true, or --profile full_text).
+immersion
+immersive
+presence
+telepresence
+flow
+engagement
+sense of being there

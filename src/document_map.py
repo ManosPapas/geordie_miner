@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List
 
 import numpy as np
 import pandas as pd
@@ -47,6 +47,19 @@ def _hover_labels(cfg: Config, doc_ids: List[str]) -> List[str]:
         except Exception:
             pass
     return [titles_by_id.get(did, did) for did in doc_ids]
+
+
+def _journal_labels(cfg: Config, doc_ids: List[str]) -> List[str]:
+    """Journal per doc from metadata.csv (empty list if unavailable)."""
+    path = Path(cfg.output_path("metadata.csv"))
+    if not path.exists():
+        return []
+    try:
+        df = pd.read_csv(path, dtype=str).fillna("")
+    except Exception:
+        return []
+    by_id = {str(r["doc_id"]): (str(r.get("journal", "")) or "(unknown)") for _, r in df.iterrows()}
+    return [by_id.get(did, "(unknown)") for did in doc_ids]
 
 
 def write_document_map(
@@ -102,11 +115,24 @@ def write_document_map(
     fig.write_html(html_path, include_plotlyjs="inline")
     log(f"  document map: interactive HTML written to {html_path}")
 
+    # Optional journal-level view: same coordinates, coloured by source/journal.
+    journals = _journal_labels(cfg, doc_ids)
+    if journals and len(set(journals)) > 1:
+        df["journal"] = journals
+        jfig = px.scatter(
+            df, x="x", y="y", color="journal",
+            hover_data={"x": False, "y": False, "doc_id": True, "hover": True, "journal": True},
+            title=f"Document map by journal — {os.path.basename(os.path.normpath(cfg.directory_data))}",
+            labels={"x": "UMAP-1", "y": "UMAP-2"}, height=700,
+        )
+        jfig.update_traces(marker=dict(size=8, line=dict(width=0.5, color="DarkSlateGrey")))
+        jfig.update_layout(legend_title_text="journal", template="plotly_white")
+        jfig.write_html(cfg.output_path("document_map_by_journal.html"), include_plotlyjs="inline")
+        log("  document map: journal-coloured view -> document_map_by_journal.html")
+
     # Also a static PNG (matplotlib — already a dep).
     try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+        from plotting import plt
 
         plt.figure(figsize=(10, 7))
         unique = sorted(set(topic_labels))

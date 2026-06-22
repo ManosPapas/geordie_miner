@@ -125,6 +125,11 @@ def run_bertopic(
             f.write(f"{label} ({counts[i] if i < len(counts) else 0} docs): ")
             f.write(", ".join(f"{w} ({s:.4f})" for w, s in words) + "\n")
 
+    # And the [doc_id, topic_number] membership file (matches the old code's convention).
+    with open(cfg.output_path("topics_bertopic_doc2topic.txt"), "w", encoding="utf-8") as f:
+        for idx, lbl in enumerate(labels):
+            f.write(f"{doc_ids[idx]}, {int(lbl) + 1}\n")
+
     return {
         "label": f"BERTopic_{n_topics}",
         "labels": labels,

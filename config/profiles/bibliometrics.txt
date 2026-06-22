@@ -1,0 +1,19 @@
+# Bibliometrics-focused profile — overlays config/config.txt. Emphasises the
+# bibliometric / citation / collaboration / science-mapping layer and skips the
+# heavy embedding topic model for speed. Lexical analysis off.
+# Use with:  python geordie_miner.py run <data_dir> --profile bibliometrics
+
+[topic_modelling]
+enable_bertopic = false
+
+[collaboration]
+enable = true
+
+[topic_evolution]
+enable = true
+
+[science_map]
+enable = true
+
+[lexical]
+enable = false

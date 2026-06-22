@@ -3,7 +3,7 @@
 Pure regex, no external dependencies. Works on the References / Bibliography
 section detected by `sections.py`. For each reference, attempts to extract
 authors, year, title, journal. Then matches references against other papers in
-the same corpus (by author surname + year + title overlap) to build a
+the same corpus (by publication year + title-keyword overlap) to build a
 citation graph.
 
 Output:
@@ -17,13 +17,13 @@ from __future__ import annotations
 import csv
 import os
 import re
-from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
 import networkx as nx
 
 from config import Config
 from sections import detect_sections
+from vosviewer import export_vosviewer
 
 
 # Detect a year in parens or standalone.
@@ -90,15 +90,6 @@ def _parse_reference(raw: str) -> Dict[str, str]:
     return {"authors": authors, "year": year, "title": title, "journal": journal, "raw": raw}
 
 
-def _first_surname(authors: str) -> str:
-    """Return the first author's surname, lowercased."""
-    if not authors:
-        return ""
-    # Take chunk up to first comma, period, ampersand, or 'and'
-    first = re.split(r"[,&.]| and ", authors, maxsplit=1)[0].strip()
-    return first.lower()
-
-
 def _title_keywords(title: str) -> set:
     """Return a set of lowercase content words from a title (≥4 chars)."""
     words = re.findall(r"[A-Za-z]{4,}", title.lower())
@@ -107,9 +98,9 @@ def _title_keywords(title: str) -> set:
 
 
 def _build_corpus_index(text_dir: str) -> Dict[str, Dict]:
-    """Index every doc in `text_dir` by surname + year + title for matching.
+    """Index every doc in `text_dir` by year + title keywords for matching.
 
-    Returns dict: doc_id → {surname, year, title_keywords, file}.
+    Returns dict: doc_id → {file, title, year, title_keywords}.
     The "title" is heuristically taken as the first long line of the doc.
     """
     from metadata import _detect_title, _detect_year  # reuse helpers
@@ -224,3 +215,13 @@ def extract_references(cfg: Config, log: Callable[[str], None]) -> None:
         f"  citation network: {g.number_of_nodes()} nodes, {g.number_of_edges()} edges. "
         f"Open citation_network.gexf in Gephi to explore."
     )
+
+    # Also export the citation graph in VOSviewer's native format. (The whole
+    # references stage is already wrapped non-fatally by the caller.)
+    if g.number_of_edges() > 0:
+        export_vosviewer(
+            g,
+            cfg.output_path("citation_network_vosviewer_map.txt"),
+            cfg.output_path("citation_network_vosviewer_network.txt"),
+            log,
+        )

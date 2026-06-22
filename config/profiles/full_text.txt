@@ -1,0 +1,22 @@
+# Full-text exploration profile — overlays config/config.txt. Emphasises text:
+# linguistic annotation, sentence structure, and dictionary concepts; lighter on
+# bibliometric networks. Annotation needs `python -m spacy download en_core_web_sm`.
+# Use with:  python geordie_miner.py run <data_dir> --profile full_text
+
+[preprocessing]
+preserve_sentences = true
+
+[annotation]
+enable = true
+
+[lexical]
+enable = true
+
+[topic_evolution]
+enable = true
+
+[collaboration]
+enable = false
+
+[science_map]
+enable = false
